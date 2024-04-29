@@ -17,13 +17,14 @@ The dataset used for the Werner et al study can be accessed from the GEO SuperSe
   + GSExxx [Mass-Spec]
 
 # Minimum Requirements
-  * Download and install R from here. R (3.6.2) 
+  * Download and install R from here. R (4.1.2)
   * Download the dataset from GEO SuperSeries xxx.
-  * R packages
+  * Main R packages
  
-    + edgeR (3.28.1) 
-    + Seurat ( 3.0)
+    + edgeR (3.28.1)
     + limma package(3.42.2)
+    + Seurat (4.3.0.1)
+    + Harmony (0.10)
 
   <details>
   <summary>Click to expand Bioinformatics and Genomics packages!</summary>
@@ -134,4 +135,5 @@ The dataset used for the Werner et al study can be accessed from the GEO SuperSe
 | Normal RNAseq             | Normal Counts  | Genotype-Tissue Expression (GTEx)              | [Portal](https://gtexportal.org/home/)             |
 | scRNAseq Normal                   | Chen et al, 2022    | PMID: 34864916                 | [PUBMED](https://pubmed.ncbi.nlm.nih.gov/34864916/)                                                                                                                                                                                     |
 | RNAseq index                 | Genomic index      | GENCODE                 | [INDEX](ftps://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_37/GRCh38.primary_assembly.genome.fa.gz)                                                                                                                                                                                                                     |
-| RNAseq GTF                   | Gene Annotation    | GENCODE                 | [GTF](ftps://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_37/gencode.v37.annotation.gtf.gz)             
+| RNAseq GTF                   | Gene Annotation    | GENCODE                 | [GTF](ftps://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_37/gencode.v37.annotation.gtf.gz)|
+| Annotation of cell types     |  Ianevski et al, 2022 | ScType | [Github](https://github.com/IanevskiAleksandr/sc-type) 
