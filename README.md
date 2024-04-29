@@ -7,8 +7,10 @@ This repository contains a set of R scripts specifically designed for the data a
   
 # Features
 ## Bulk RNAseq and scRNAseq: 
-  + This repo is tailored to generate all the figures for RNAseq and scRNAseq for the manuscript
-  + NOTE, however, due to data sensitivity, all raw data must be downloaded as cited in the original manuscript. Preprocessed data can be provided upon request to the Stieglitz Lab.
+  + There are two R markdowns to generate all figures pertaining to the RNAseq and scRNAseq for the manuscript.
+  + There is a single auxiliary script that will provide all the custom functions to run the above markdowns. 
+  + Moreover, there is a single config file that provides the paths to all the necessary input files. 
+    + Please note that due to data sensitivity and licensing restrictions, we cannot provide all the files mentioned in this manuscript. Users must manually download these files using the source references provided here or in the manuscript. For example, all raw data must be downloaded as cited in the original manuscript. Preprocessed data can be requested from the Stieglitz Lab.
 # Data
 The dataset used for the Werner et al study can be accessed from the GEO SuperSeries under the accession number XXX.
 ### This SuperSeries is composed of the following SubSeries:
