@@ -1,0 +1,1810 @@
+---
+title: "JMML: scRNAseq surface marker"
+author: "Werner et al"
+output: 
+  html_document:
+  toc: TRUE
+toc_float: FALSE
+editor_options: 
+  chunk_output_type: console
+---
+
+  
+  <style type="text/css">
+  .main-container {
+    max-width: 1800px;
+    margin-left: 20px;
+    margin-right: auto;
+  }
+.toc-content {
+  max-width: 1800px;
+  margin-left: 50px;
+  margin-right: auto;
+}
+
+div {
+  
+  margin-left: 20px;
+}
+
+
+hr.new1 {
+  border-top: 1px solid #84a8e0;
+}
+
+
+
+</style>
+  
+  # Results {.tabset}
+  
+  
+  <div style="background-color: #f0f5c1;">
+  
+  
+  </div>
+  
+  <hr>
+  
+  
+  
+```{r setup, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE, cache=FALSE}
+
+knitr::opts_chunk$set(echo=FALSE, message=FALSE, warning=FALSE, include = FALSE , cache.lazy = FALSE )
+
+# load libraries 
+
+## data 
+library ( openxlsx )
+
+# data processing 
+library ( stringr )
+library ( dplyr)
+library ( tidyr)
+library ( purrr )
+
+library ( factoextra)
+
+# statistical modeling 
+library ( Seurat)
+library ( harmony)
+library ( limma )
+
+
+# plot & ascethetic  
+library ( ggplot2)
+library ( patchwork)
+library ( ggrepel )
+library ( ComplexHeatmap)
+library ( RColorBrewer )
+library ( knitr)
+library ( kableExtra)
+library ( DT )
+library ( ggpubr )
+# rasterizing
+library(ggrastr)
+
+# genomic 
+library ( HGNChelper)
+library ( pathfindR )
+
+
+# load config. These are all the files necessary - please make sure its available 
+config = data.frame ( t ( read.table ( "config.txt", header = T  ) ) , stringsAsFactors = F) 
+colnames ( config ) = config[1:1, ]
+config = config [-1,]
+
+
+source ( config$accesory)
+# for SC-type please download from source
+# GNU General Public License v3.0 (https://github.com/IanevskiAleksandr/sc-type/
+source ( config$sctype)
+
+# loading necessary annotations and data 
+
+cell_surface = readRDS(  config$cell_surface )
+cell_surface$meta
+cell_surface = cell_surface$genelist
+cs = read.xlsx( config$cell_surface_hu, sheet="genes")
+cell_surface = unique ( c( cell_surface, cs$HGNC.Symbol))
+
+gtex = readRDS( config$gtex )
+goanadb = readRDS(config$gopath)
+ens = goanadb$ens
+goanadb = goanadb$goanadb
+
+```
+
+
+```{r}
+
+# global parameters 
+
+mt_cut = 15 
+nfeature_min = 200 
+nfeature_max = 4000
+umi_min = 1000 
+
+# some preprocessing and merge files will be stored as cache 
+redo = 0 # set to one to redo all 
+redo_deg = 0 # for DEG 
+# for DEG if redo is 1 
+if ( redo == 1){
+  redo_deg = 1
+}
+dir.create ( config$out_dir )
+
+# after preprocessing and merging will be stored here
+preprocessed_dir = paste0 ( config$out_dir, "pre_processed_7/")
+dir.create ( preprocessed_dir )
+
+filename_raw = paste0(preprocessed_dir, "RAW_JMML_HTANcontrols_7.rds" )
+filename_norm = paste0(preprocessed_dir, "Normalize_JMML_HTANcontrols_7.rds" )
+
+out_dir = config$out_dir
+out_figure = paste0(out_dir, "figures/")
+dir.create(out_dir)
+dir.create ( out_figure )
+
+wb <- createWorkbook() # this will hold all the excel outputs 
+
+# please contact authors or download from repository 
+
+raw_dir = config$raw_dir
+raw_dirs = list.dirs(raw_dir, recursive = TRUE)
+raw_dirs = raw_dirs[ grepl ( "L.*outs$", raw_dirs, ignore.case = TRUE)] 
+
+# again please contact GEO set 
+htan_raw = config$htan_raw
+
+
+
+
+
+```
+
+```{r}
+# key 
+if ( 1 > 2){
+### remove later 
+
+
+hm_old = read.xlsx("https://www.dropbox.com/s/77w2q4dyicnckys/scRNASeq%20pre_post%20for%20Alex%20ADVl1521.xlsx?dl=1" , sheet='Sheet1')
+hm_old = hm_old[complete.cases(hm_old), ]
+hm_old$Sample = gsub ( " ", "", hm_old$Sample)
+hm_old$UPN = gsub ( " ", "", hm_old$UPN)
+hm_old = hm_old[hm_old$Timepoint == "Pre-trametinib", ]
+
+htan = read.xlsx("https://www.dropbox.com/scl/fi/y9dze3b41prqy0vl6zxo0/htan_normal_cellkey.xlsx?rlkey=8pjipp9na4c30woi6zc9zo1xz&dl=1")
+
+htan_key = read.table ( "https://www.dropbox.com/scl/fi/xpytu28c6xmgukhzsne68/htan.csv?rlkey=lj854yvn9yo0byv9fcluic8xa&dl=1", header =T, sep=';')
+
+}
+hm_key1 = readRDS(config$key1)
+hm_key = hm_key1$key
+hm_old = hm_key1$trametinib
+decode = hm_key1$decode
+
+```
+
+
+```{r}
+
+
+if ( redo == 1 ){
+
+raw_df = data.frame()
+for ( s in raw_dirs ){
+  id = str_match(s, ".*_(L.)\\/outs")[, 2]
+  raw_df = rbind ( raw_df , data.frame ( set=id, dir=s))
+}
+
+
+
+
+samples = unique (  hm_key1$decode$Patient)
+
+# are there any missing in the decoder? 
+setdiff(hm_key$pid, samples )
+
+# read in all sets
+raw_df$dir = paste0 ( raw_df$dir, "/filtered_feature_bc_matrix/")
+
+
+superset_raw <- list()
+
+superset_raw[["L0"]] <- CreateSeuratObject(counts = Read10X(data.dir = raw_df[1, ]$dir ) , project = 'jmml', min.cells = 3, min.features = 200)
+superset_raw[["L1"]] <- CreateSeuratObject(counts = Read10X(data.dir = raw_df[2, ]$dir ) , project = 'jmml', min.cells = 3, min.features = 200)
+superset_raw[["L2"]] <- CreateSeuratObject(counts = Read10X(data.dir = raw_df[3, ]$dir ) , project = 'jmml', min.cells = 3, min.features = 200)
+superset_raw[["L3"]] <- CreateSeuratObject(counts = Read10X(data.dir = raw_df[4, ]$dir ) , project = 'jmml', min.cells = 3, min.features = 200)
+
+pid_raw = list ()
+
+
+# loop through each patient and collect counts for each batch/set 
+
+for ( s in hm_key$pid ){
+  
+  
+  print (s)
+  set = hm_key[ hm_key$pid == s, ]$raw
+  
+  
+  temp1 = subset(superset_raw[[set]], cells = decode [ decode$Patient %in% s, ]$barcode  ) 
+  temp1@meta.data$set = set 
+  
+  pid_raw[[s]]  = subset(temp1, cells = decode [ decode$Patient %in% s, ]$barcode  )
+  pid_raw[[s]]@meta.data$pid = s 
+  pid_raw[[s]]@meta.data$orig.ident = s 
+}
+
+
+
+
+################# add more samples from trametinib Calling this L4 ##### 
+
+# get raw from trametinib study and add pre-treatment group
+# we are only going to use Pre-treatment. 
+hm_old$Timepoint
+tr_dir =  config$raw_dir_trametinib
+tr_dirs = list.dirs(tr_dir, recursive = F)
+
+
+tr_df = data.frame()
+for ( s in tr_dirs ){
+  sdir = paste0(s, "/outs/filtered_feature_bc_matrix/") 
+  if ( dir.exists(sdir)){
+    id = str_match(s, ".*\\/(.+)")[, 2]
+    tr_df = rbind ( tr_df , data.frame ( pid=id, dir=sdir))
+  }
+}
+
+tr_df = tr_df[tr_df$pid %in% hm_old$Sample, ]
+
+
+for ( s in tr_df$pid ){
+  
+  
+  print (s)
+  pid = tr_df[ tr_df$pid == s, ]$dir
+  
+  pid_raw[[s]]= CreateSeuratObject(counts =  Read10X(data.dir = pid ) , project = 'jmml', min.cells = 3, min.features = 200)
+  pid_raw[[s]]@meta.data$pid = s 
+  pid_raw[[s]]@meta.data$orig.ident = s 
+  pid_raw[[s]]@meta.data$set = "L4"
+}
+
+# rename healthy donor to HM id
+names ( pid_raw)[ which ( names ( pid_raw) %in% "bm.healthydonor6" )  ] = "HM5746"  
+sort ( names ( pid_raw ) )
+
+# need to change the pid in the meta as well in the raw data objects 
+pid_raw[["HM5746"]]@meta.data$pid = "HM5746"
+pid_raw[["HM5746"]]@meta.data$orig.ident = "HM5746"
+
+# update key 
+hm_key[ grepl ( "bm.health" , hm_key$pid), ]$pid = "HM5746"
+hm_key[ grepl ( "healthy" , hm_key$upn), ]$upn = "Healthy"
+### remove sample 
+
+pid_raw$HM5376 = NULL 
+
+#####################################################
+########## now lets get the normal samples #########
+htan = hm_key1$htan_key
+
+
+norm_dir =  htan_raw 
+norm_df = list.dirs(norm_dir, recursive = F)
+norm_df= data.frame ( pid = stringr::str_match(norm_df, ".*(HD_.*?)_" ) [ , 2]
+                      , dir = paste0 ( norm_df, "/outs/filtered_feature_bc_matrix/")
+                      )
+
+
+### REMOVING OLDER SAMPLES AND ONLY TAKING LIVE CELLS 
+old_samples = c ( "HD_2153", "HD_2111" ) 
+norm_df = norm_df[!norm_df$pid %in%old_samples,  ]
+
+
+
+# clean up normal 
+# will downsample similar to the original paper 
+set.seed ( 2 )
+norm = read.table ( "https://www.dropbox.com/scl/fi/xpytu28c6xmgukhzsne68/htan.csv?rlkey=lj854yvn9yo0byv9fcluic8xa&dl=1", 
+                    header =T, sep=';')
+tnorm = norm %>% group_by(sample) %>% summarise ( total = n()) 
+tnorm$temp = gsub ( "HumanHealthy_|donor", "", tnorm$sample)
+tnorm$pid = paste0 ( "HD_",str_match( tnorm$temp , "(.*)_(.*)" )[ , 2] )
+tnorm$sort = str_match( tnorm$temp , "(.*)_(.*)" )[ , 3]
+tnorm$sort = ifelse ( grepl ( "live", tnorm$sort, ignore.case = T), "Live", 
+                      ifelse ( grepl ( "CD38", tnorm$sort, ignore.case = T), "CD38", "CD34")
+                      )
+
+for ( s in unique ( norm_df$pid)){
+  
+  print ( s )
+  
+  nf = norm_df[ norm_df$pid == s, ]
+  nf$sort = ifelse ( grepl ( "CD38", nf$dir), 
+                     "CD38-", ifelse (
+                       grepl ( "CD34", nf$dir), 
+                               "Lin- CD34+", "Live Cell"
+                               )
+                     )
+  
+  live = which ( grepl ( "Live",  nf$sort, ignore.case = T))
+  cd38 = which ( grepl ( "CD38-",  nf$sort, ignore.case = T))
+  cd34 = which ( grepl ( "CD34+",  nf$sort, ignore.case = T))     
+    
+  
+  
+  skey = tnorm[ tnorm$pid == s, ]
+  # for some reason their live is less than mine may be min.features or min.cells? 
+  skey$total = round ( skey$total * 1.29 , 0 ) 
+              
+  mini = list()
+  
+  live = CreateSeuratObject(counts =  Read10X(data.dir = nf$dir[live] ) , project = s , min.cells = 3, min.features = 200)
+  cd38 = CreateSeuratObject(counts =  Read10X(data.dir = nf$dir[cd38] ) , project = s , min.cells = 3, min.features = 200)
+  cd34 = CreateSeuratObject(counts =  Read10X(data.dir = nf$dir[cd34] ) , project = s , min.cells = 3, min.features = 200)
+  
+  
+  set.seed(2)
+  
+  cd38 = cd38[, sample(colnames(cd38), size = skey[ skey$sort == "CD38", ]$total , replace=F) ]
+  cd34 = cd34[, sample(colnames(cd34), size = skey[ skey$sort == "CD34", ]$total , replace=F) ]
+  
+  
+  pid_raw[[s]]= merge(live, y = c(cd38, cd34), add.cell.ids =  c( s, s, s ) , project = s )
+  
+  pid_raw[[s]]@meta.data$pid = s 
+  pid_raw[[s]]@meta.data$orig.ident = s 
+  pid_raw[[s]]@meta.data$set = "HTAN"
+  
+  
+}
+
+
+################### clean up and get total ############
+
+total_cells = data.frame()
+
+for ( s in names ( pid_raw) ) {
+  
+  total_cells = rbind ( total_cells, data.frame ( pid = s, 
+  L0 = nrow ( pid_raw[[s]]@meta.data[pid_raw[[s]]@meta.data$set == "L0",   ] )
+  ,L1 = nrow ( pid_raw[[s]]@meta.data[pid_raw[[s]]@meta.data$set == "L1",   ] )
+  ,L2 = nrow ( pid_raw[[s]]@meta.data[pid_raw[[s]]@meta.data$set == "L2",   ] )
+  ,L3 = nrow ( pid_raw[[s]]@meta.data[pid_raw[[s]]@meta.data$set == "L3",   ] )
+  ,L4 = nrow ( pid_raw[[s]]@meta.data[pid_raw[[s]]@meta.data$set == "L4",   ] )
+  ,HTAN = nrow ( pid_raw[[s]]@meta.data[pid_raw[[s]]@meta.data$set == "HTAN",   ] )
+  , stringsAsFactors = FALSE
+  )
+  )
+}
+  
+total_cells = merge ( hm_key, total_cells,  by.x = "pid", by.y= 'pid', all.y=T, all.x=F ) 
+# fix htan 
+h = which ( grepl ( "^HD", total_cells$pid))
+total_cells[ h, ]$upn = "Healthy"
+total_cells[ h, ]$batch = "HTAN"
+total_cells[ h, ]$raw = "L5"
+
+trem = setNames(hm_old$UPN, hm_old$Sample )
+total_cells$batch = ifelse ( is.na ( total_cells$upn), "Trametinib", total_cells$batch)
+total_cells$raw = ifelse ( is.na ( total_cells$raw), "L4", total_cells$raw)
+total_cells$upn = ifelse ( is.na ( total_cells$upn),  trem[total_cells$pid]  , total_cells$upn)
+
+total_cells = total_cells[ order (  total_cells$raw), ]
+
+
+}
+```
+
+```{r}
+
+if ( redo == 1){
+############### preprocess, filter and then SCT transform for each sample ###############
+
+
+
+slist = list () # each filtered sample will be store in this list to be merged later. 
+preplots = list()
+
+total_cells$before = apply  ( total_cells[ , 5:10] ,1 , sum )
+
+
+for ( id in names( pid_raw) ){
+
+
+sobj <- pid_raw[[ id ]]
+# add mitochondria percent 
+sobj[["percent.mt"]] <- PercentageFeatureSet(sobj, pattern = "^MT-")
+head(sobj@meta.data, 5)
+
+# plot mitochondria 
+mt_plot <- plot_hist_perc ( sobj@meta.data, plot_this="percent.mt", ccc="#6e9be5" , cut_here = 15, msg = "" , binwidth=5, y=.3) 
+nfeature_plot <- plot_hist_perc ( sobj@meta.data, plot_this="nFeature_RNA", ccc="#6e9be5" 
+                                  , cut_here = c (nfeature_min,  nfeature_max)
+                                  , msg = "" 
+                                  , binwidth=200, y=.02  # y is the position of annotated text
+                                  ) 
+
+preplots[[id]][["hist"]] <- (  ( mt_plot + ggtitle(id) ) / nfeature_plot )
+
+# quantile ( sobj@meta.data$percent.mt) # here we see that 50% of the cells will be removed if MT is set to 10% 
+# quantile ( sobj@meta.data$nFeature_RNA) # 25% will be removed if the high end is set to 2500 
+
+
+
+# Visualize QC metrics as a violin plot
+before_plot = VlnPlot(sobj, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, cols="#FAF632" )
+before_total = length ( Cells(sobj) )
+
+# after 
+sobj =  subset(sobj, subset = nFeature_RNA > nfeature_min & nFeature_RNA < nfeature_max & percent.mt < mt_cut & 
+                 nCount_RNA > umi_min 
+               )
+
+
+
+after_total = length ( Cells(sobj) )
+after_plot = VlnPlot(sobj, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3, cols="#526E9F")
+
+
+preplots[[id]][["befor_after"]]  =  (before_plot  ) / after_plot 
+
+
+total_cells[total_cells$pid ==  id, ]$after = after_total
+
+# save seurat object
+slist[[id]] = sobj
+slist[[id]] = SCTransform( slist[[ id ]] , vst.flavor = "v2"
+                                 , verbose = TRUE
+                                 , vars.to.regress=  c( "percent.mt"  )  ) 
+
+
+print ( paste ( "completed", id ))  
+}
+
+}
+
+
+
+if ( redo == 1){
+
+############### merge and normalized ###########
+gc()
+n=names ( slist )
+
+jmml_raw <-  merge(slist[[ n[1] ]]
+                  , y = c(slist[[ n[2] ]], slist[[ n[3] ]],
+                          slist[[ n[4] ]], slist[[ n[5] ]],
+                          slist[[ n[6] ]], slist[[ n[7] ]],
+                          slist[[ n[8] ]], slist[[ n[9] ]],
+                          slist[[ n[10] ]], slist[[ n[11] ]],
+                          slist[[ n[12] ]], slist[[ n[13] ]],
+                          slist[[ n[14] ]], slist[[ n[15] ]],
+                          slist[[ n[16] ]], slist[[ n[17] ]],
+                          slist[[ n[18] ]],
+                          slist[[ n[19] ]],
+                          slist[[ n[20] ]],
+                          slist[[ n[21] ]],
+                          slist[[ n[22] ]],
+                          slist[[ n[23] ]],
+                          slist[[ n[24] ]],
+                          slist[[ n[25] ]],
+                          slist[[ n[26] ]]
+                          ), 
+                  add.cell.ids =   n  , project = "JMML"
+                  )
+
+#jmml_raw = PrepSCTFindMarkers(jmml_raw)
+
+features <- SelectIntegrationFeatures(object.list = slist, nfeatures = 3000)
+VariableFeatures(jmml_raw) <- features
+
+
+
+unique ( jmml_raw@meta.data$orig.ident)
+jmml_raw[["pid"]] <- jmml_raw@meta.data$orig.ident
+
+
+jmml_raw <- jmml_raw %>% 
+    RunPCA(npcs = 50, verbose = FALSE,  assay = "SCT", features = features ) %>% 
+    RunUMAP(reduction = "pca", dims = 1:30, verbose = FALSE) %>%
+    FindNeighbors(reduction = "pca", dims = 1:30, verbose = FALSE) %>%
+    FindClusters(resolution = 1.2, verbose = FALSE)
+
+
+jmml_harmony <- jmml_raw %>% RunHarmony("pid", plot_convergence = T)
+
+DefaultAssay(jmml_harmony ) <- "SCT"
+
+
+
+ jmml_harmony <-    jmml_harmony %>% 
+    RunPCA(  npcs = 50, verbose = FALSE) %>%
+    RunUMAP(reduction = "harmony", dims = 1:30, verbose = FALSE) %>%
+    FindNeighbors(reduction = "harmony", dims = 1:30, verbose = FALSE) %>%
+    FindClusters(resolution = 1.1, verbose = FALSE)
+
+
+ Seurat:: DimPlot(jmml_harmony, label = T, repel = T, group.by = "seurat_clusters",  pt.size = 1 ) + 
+  ggtitle("Integrated" )  +  scale_color_manual(values = sample ( getPalette(37), 37)  )
+ 
+Seurat:: DimPlot(jmml_harmony, label = T, repel = T, group.by = "pid",  pt.size = 1 ) + 
+  ggtitle("Integrated" )  +  scale_color_manual(values = sample ( getPalette(30), 30)  )
+
+
+
+jmml_harmony@meta.data$group = ifelse ( grepl ( "^HD_|^HM5746$", jmml_harmony@meta.data$orig.ident ), "healthy_cntr", "jmml" )
+
+Seurat:: DimPlot(jmml_harmony, label = T, repel = T, group.by = "group",  pt.size = 1 ) + 
+  ggtitle("Integrated" )  +  scale_color_manual(values = group_color  )
+
+
+
+
+db_ = config$celltype_marker;
+tissue = "blood_fix" # 
+
+
+# extract shorter name 
+shortname = read.xlsx( db_)
+shortname = shortname[!duplicated ( shortname$cellName), ]
+shortname = setNames( shortname$shortName, shortname$cellName )
+# prepare gene sets
+gs_list = gene_sets_prepare(db_, tissue)
+
+es.max = sctype_score(scRNAseqData = jmml_harmony[["SCT"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = gs_list$gs_negative) 
+
+# merge by cluster
+
+cL_resutls = do.call("rbind", lapply(unique(jmml_harmony@meta.data$seurat_clusters), function(cl){
+  es.max.cl = sort(rowSums(es.max[ ,rownames(jmml_harmony@meta.data[jmml_harmony@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+  head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(jmml_harmony@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)  
+
+
+# set low-confident (low ScType score) clusters to "unknown"
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/4] = "Unknown"
+print(sctype_scores[,1:3])
+
+
+jmml_harmony@meta.data$customclassif = ""
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  jmml_harmony@meta.data$customclassif[jmml_harmony@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+
+
+# rename to shorter
+jmml_harmony@meta.data$celltype = as.character ( shortname[  jmml_harmony@meta.data$customclassif ] )
+
+
+cell_type_plot = DimPlot(jmml_harmony, reduction = "umap", label = F, repel = TRUE, group.by = 'celltype', pt.size = .5)+  
+scale_color_manual(values = ccc_celltype ) + theme( legend.position = "bottom") +
+    theme(
+    #text = element_text(face = "bold"),
+    axis.text.x=element_text(angle=0, hjust=0, size=20),
+    axis.text.y=element_text(angle=0, hjust=0, size=20),
+    axis.title = element_text(size=20 ),
+    #axis.title.y = element_text(size = 20),
+    legend.text=element_text(size=18),
+    #legend.key.size = unit(5, 'cm'),
+    plot.title = element_text(size = 30, face = "bold"),
+    axis.line = element_line(size=1))  +
+  guides(color = guide_legend(override.aes = list(size = 8), nrow = 5)) +
+  xlab ("UMAP") + ylab ( "UMAP") + ggtitle ("")
+
+cell_type_plot = LabelClusters(cell_type_plot, id = "celltype",  fontface = "bold", color = "black", size=9)
+
+cell_type_plot
+
+
+
+percent = data.frame ( table ( jmml_harmony@meta.data [ , c( "orig.ident", "celltype")]) )
+
+
+df = percent %>%
+  group_by(orig.ident) %>%
+  mutate(TotalFreq = sum(Freq), Percent = (Freq / TotalFreq) * 100) %>%
+  group_by(orig.ident, celltype) %>%
+  summarise(TotalPercent = sum(Percent), .groups = 'drop') %>% data.frame ()
+
+df[df$celltype == "C_Monocytes", ] %>%
+  kable( format = "html" , row.names = F ) %>%
+  kable_classic(full_width = F, position = "center")
+
+
+df[df$celltype == "HSC", ] %>%
+  kable( format = "html" , row.names = F ) %>%
+  kable_classic(full_width = F, position = "center")
+
+
+PrepSCTFindMarkers(jmml_harmony)
+
+# normalize RNA 
+DefaultAssay(jmml_harmony) <- 'RNA'
+jmml_harmony <- NormalizeData(object = jmml_harmony, normalization.method = "LogNormalize", 
+                  scale.factor = 10000)
+
+DefaultAssay(jmml_harmony) <- 'SCT'
+
+saveRDS(list ( final = jmml_harmony, preplots = preplots, raw = slist ), filename_norm )
+
+}else {
+  jmml_harmony = readRDS (filename_norm) 
+  preplots = jmml_harmony$preplots
+  jmml_harmony = jmml_harmony$final
+
+}
+
+#unique ( jmml_harmony$orig.ident)
+#jmml_harmony$group = ifelse (grepl ( "^HD_|HM5746", jmml_harmony$orig.ident), "healthy_cntr", "jmml" )
+
+
+
+```
+
+
+
+ 
+```{r}
+
+ccc_pid = unique ( jmml_harmony$orig.ident)
+ccc_pid = setNames(rcolor[1:length ( ccc_pid)], ccc_pid)
+
+
+# overall QC 
+raw_qc = data.frame()
+qc_summary = data.frame ()
+
+for ( n in names ( preplots) ){
+  raw_qc = rbind ( raw_qc, preplots[[n]]$hist[[1]]$data[ , c("pid", "percent.mt", "nCount_RNA", "nFeature_RNA" )] )
+  
+  qc_summary = rbind ( qc_summary, 
+  data.frame ( 
+    sample = n, 
+  nFeature_RNA = paste (   round ( as.numeric ( unlist(summary(preplots[[n]]$befor_after[[2]][[1]]$data$nFeature_RNA)) ),0)[c(1,3,6)], collapse = ","),
+  
+  nCount_RNA = paste (   round ( as.numeric ( unlist(summary(preplots[[n]]$befor_after[[2]][[2]]$data$nCount_RNA )) ),0)[c(1,3,6)], collapse = ","),
+  
+ "percent MT" = paste (   round ( as.numeric ( unlist(summary(preplots[[n]]$befor_after[[2]][[3]]$data$percent.mt )) ),2)[c(1,3,6)], collapse = ","), 
+ "Total Before" = nrow ( preplots[[n]]$befor_after[[1]][[3]]$data ), 
+ "Total After" = nrow ( preplots[[n]]$befor_after[[2]][[3]]$data )
+ 
+  )
+  )
+}
+
+
+
+
+cut_here = mt_cut
+qc_mito = ggplot(raw_qc, aes(x=percent.mt ) ) + 
+    geom_histogram(aes(y=(..count..)/sum(..count..) ,  fill=pid), alpha=.2 , binwidth= .2 )+
+    # geom_density(alpha=0, fill="grey") +
+    theme(legend.position="none",  legend.key = element_blank(),
+          # element_blank()
+          axis.text.y = element_text(size= 18 ),
+          axis.text.x =  element_text(size= 18 ),
+          axis.title.x = element_text(size=18),
+          axis.title.y     = element_text(size=25), 
+          legend.text      =element_text(size=25),
+          legend.title = element_text(size=25),
+          plot.title = element_text(size = 40, face = "bold", hjust = 0.5)
+          # hjust centers the title
+    ) + theme(panel.grid.major = element_blank()
+              , panel.grid.minor = element_blank()
+              ,panel.background = element_blank()
+              , axis.line = element_line(colour = "black") # plot border
+    ) + ylab ( "percent") + scale_fill_manual ( values = ccc_pid ) +
+   geom_vline(xintercept = cut_here, linetype = 2, color = "red") +
+   annotate(geom = "text", x = cut_here , y = .02, label = paste0 ( cut_here ), color = "red",
+            angle = 90, vjust=2.5) + xlab("") + xlim ( 0, 105) + ggtitle ( "Mitochondria")+ ylab("")
+
+
+cut_here = c (nfeature_min,  nfeature_max)
+
+qc_nfeature = ggplot(raw_qc, aes(x=nFeature_RNA ) ) + 
+    geom_histogram(aes(y=(..count..)/sum(..count..) ,  fill=pid), alpha=.2 , binwidth=200 )+
+    # geom_density(alpha=0, fill="grey") +
+   theme(legend.position="none",  legend.key = element_blank(),
+          # element_blank()
+          axis.text.y = element_text(size= 18 ),
+          axis.text.x =  element_text(size= 18 ),
+          axis.title.x = element_text(size=18),
+          axis.title.y     = element_text(size=25), 
+          legend.text      =element_text(size=25),
+          legend.title = element_text(size=25),
+          plot.title = element_text(size = 40, face = "bold", hjust = 0.5)
+          # hjust centers the title
+    ) + theme(panel.grid.major = element_blank()
+              , panel.grid.minor = element_blank()
+              ,panel.background = element_blank()
+              , axis.line = element_line(colour = "black") # plot border
+    ) + scale_fill_manual ( values = ccc_pid ) + ylab ( "percent") + 
+   geom_vline(xintercept = cut_here, linetype = 2, color = "red") +
+   annotate(geom = "text", x = cut_here-25 , y = .02, label = paste0 ( cut_here ), color = "red",
+            angle = 90, vjust=2.5) + xlab("") + ggtitle ( "nFeature") + ylab("")
+
+qc_mito / qc_nfeature
+
+```
+
+# Summary {.tabset}
+
+  * See key for sample assignments.
+  * Normal samples were aquired from Chen et al, PMID: 34864916
+    + Single-cell multiomics reveals increased plasticity, resistant populations, and stem-cell-like blasts in KMT2A-rearranged leukemia
+    + While the original manuscript cites the sources for raw data, the authors had to send the raw sequences to us manually due to issues with their repository 
+    
+  
+## pre-processing and normalization workflow {.tabset}
+
+  * The steps below encompass the standard pre-processing workflow based on Seurat's basic recommendations. Please note the QC cutoffs on subsequent figures/method below. 
+  
+  * Cells are filtered based on 3 parameters.
+  
+    + cells that have unique feature ( genes ) counts over `r nfeature_max` or less than `r nfeature_min` were removed.
+    + likewise total RNA molecules with less than `r umi_min` were removed. 
+    
+      - Low-quality cells or empty droplets will often have very few genes
+      -  Cell doublets or multiplets may exhibit an aberrantly high gene count
+
+    + Moreover cells with > `r mt_cut `% mitochondrial counts. High mitochondrial indicates Low-quality / dying cells.
+    
+      -Low-quality / dying cells often exhibit extensive mitochondrial contamination
+      - We calculate mitochondrial QC metrics with the `PercentageFeatureSet` function, which calculates the percentage of counts originating from a set of features
+      - We use the set of all genes starting with `MT-` as a set of mitochondrial genes
+
+
+### tabulate. 
+
+  * before and after shows how many cells were kept after preprocessing. 
+  * expected column is he total raw read count and should match the before column
+
+
+```{r fig=TRUE,fig.width=16, fig.height=10, echo=FALSE, include=TRUE, results='asis' }
+
+
+#kable( temp, format = "html" , row.names = F, caption = "Samples" ) %>% kable_classic(full_width = F, position = "center")
+
+kable( qc_summary, format = "html" , row.names = F, caption = "QC" ) %>% kable_classic(full_width = F, position = "center") %>% column_spec(c(1), background = "#f0f5f7",  border_right = T, italic =T) %>% 
+  column_spec(c(5), background = "#f0f5f7",  border_left =T ) %>% 
+  column_spec(c(6), background = "#f0f5f7",  border_left =F ) %>% 
+  column_spec(c(2:3),  border_right =T ) %>% 
+   footnote(
+           symbol = c("Final: Min, Median, Max")
+           )
+
+
+
+```
+
+### Visual summary 
+
+```{r fig=TRUE,fig.width=10, fig.height=10, echo=FALSE, include=TRUE, results='asis' }
+qc_mito / qc_nfeature
+
+pdf(paste0(out_figure, "QC_summary_plots.pdf"), width=5.5, height=7, useDingbats=F)
+
+qc_mito / qc_nfeature
+
+dev.off()
+
+
+
+
+```
+
+```{r fig=TRUE,fig.width=17, fig.height=10, echo=FALSE, include=TRUE, results='asis' }
+
+for ( n in names (preplots )){
+  cat ( "### ", n, "\n\n"  )
+  print ( ( preplots[[n]]$hist)  |  ( preplots[[n]]$befor_after ))
+  cat ( '\n\n')
+}
+
+```
+
+
+
+```{r}
+
+########### redo cell type 
+## these has already been assigned however keep this here in case 
+## definition needs updating. 
+
+redocelltype = 0
+if ( redocelltype == 1){
+  
+db_ = config$celltype_marker;
+tissue = "blood_fix" # 
+
+
+# extract shorter name 
+shortname = read.xlsx( db_)
+shortname = shortname[!duplicated ( shortname$cellName), ]
+shortname = setNames( shortname$shortName, shortname$cellName )
+# prepare gene sets
+gs_list = gene_sets_prepare(db_, tissue)
+
+es.max = sctype_score(scRNAseqData = jmml_harmony[["SCT"]]@scale.data, scaled = TRUE, 
+                      gs = gs_list$gs_positive, gs2 = gs_list$gs_negative) 
+
+# merge by cluster
+
+cL_resutls = do.call("rbind", lapply(unique(jmml_harmony@meta.data$seurat_clusters), function(cl){
+  es.max.cl = sort(rowSums(es.max[ ,rownames(jmml_harmony@meta.data[jmml_harmony@meta.data$seurat_clusters==cl, ])]), decreasing = !0)
+  head(data.frame(cluster = cl, type = names(es.max.cl), scores = es.max.cl, ncells = sum(jmml_harmony@meta.data$seurat_clusters==cl)), 10)
+}))
+sctype_scores = cL_resutls %>% group_by(cluster) %>% top_n(n = 1, wt = scores)  
+
+
+# set low-confident (low ScType score) clusters to "unknown"
+sctype_scores$type[as.numeric(as.character(sctype_scores$scores)) < sctype_scores$ncells/4] = "Unknown"
+print(sctype_scores[,1:3])
+
+
+jmml_harmony@meta.data$customclassif = ""
+for(j in unique(sctype_scores$cluster)){
+  cl_type = sctype_scores[sctype_scores$cluster==j,]; 
+  jmml_harmony@meta.data$customclassif[jmml_harmony@meta.data$seurat_clusters == j] = as.character(cl_type$type[1])
+}
+
+
+# rename to shorter
+jmml_harmony@meta.data$celltype = as.character ( shortname[  jmml_harmony@meta.data$customclassif ] )
+
+
+
+}
+  
+cell_type_plot = DimPlot(jmml_harmony, reduction = "umap", label = F, repel = TRUE, group.by = 'celltype', pt.size = .5)+  
+scale_color_manual(values = ccc_celltype ) + theme( legend.position = "bottom") +
+    theme(
+    #text = element_text(face = "bold"),
+    axis.text.x=element_text(angle=0, hjust=0, size=20),
+    axis.text.y=element_text(angle=0, hjust=0, size=20),
+    axis.title = element_text(size=20 ),
+    #axis.title.y = element_text(size = 20),
+    legend.text=element_text(size=18),
+    #legend.key.size = unit(5, 'cm'),
+    plot.title = element_text(size = 30, face = "bold"),
+    axis.line = element_line(size=1))  +
+  xlab ("UMAP") + ylab ( "UMAP") + ggtitle ("")
+
+# smaller versions for multi 
+cell_type_plot_multi = LabelClusters(cell_type_plot, id = "celltype", color = "black", size=4)
+cell_type_plot_multi = cell_type_plot_multi+ guides(color = guide_legend(override.aes = list(size = 2.5), ncol = 2)) + theme( legend.position = "right")
+
+cell_type_plot = LabelClusters(cell_type_plot, id = "celltype",  fontface = "bold", color = "black", size=7) +
+  guides(color = guide_legend(override.aes = list(size = 8), nrow = 5))
+
+cell_type_plot 
+
+
+
+
+
+
+
+```
+
+
+
+```{r}
+
+# generate other visuals 
+set.seed(42)
+# this is how many clusters this thing yield 
+clusters = unique ( jmml_harmony$seurat_clusters )
+clusters 
+ccc_clusters = sample ( rcolor, length ( clusters) ) 
+ccc_batch = sample ( rcolor, 30 ) 
+
+s_plot = DimPlot(jmml_harmony, label = F, repel = T , pt.size = .5, 
+                 group.by = "seurat_clusters") + 
+          scale_color_manual(values = ccc_clusters) +
+  theme(
+  legend.position = "none",
+  #text = element_text(face = "bold"),
+  axis.text.x=element_text(angle=0, hjust=0, size=20),
+  axis.text.y=element_text(angle=0, hjust=0, size=20),
+  axis.title = element_text(size=20 ),
+  #axis.title.y = element_text(size = 20),
+  legend.text=element_text(size=18),
+  #legend.key.size = unit(10, 'cm'),
+  plot.title = element_text(size = 30, face = "bold"),
+  axis.line = element_line(size=1))  +
+  #guides(color = guide_legend(override.aes = list(size=20))) +
+  xlab ("UMAP") + ylab ( "UMAP") + ggtitle ("") 
+
+s_plot = LabelClusters(s_plot, id = "seurat_clusters",  fontface = "bold", color = "black", size=9)
+
+
+# plots total - default for seurat transformation is 1:30 so no need to mess with this. 
+# changing resolution does'nt seem to effect this experiment
+
+# want to visualize if there is a batch 
+
+batch_plot_pid = DimPlot(jmml_harmony, label = T, repel = T, group.by = "orig.ident", pt.size = .75 ) + 
+  ggtitle("Unsupervised clustering")  + scale_color_manual(values = ccc_batch)
+
+
+
+batch_plot_group = DimPlot(jmml_harmony, label = F, repel = T, group.by = "group",  pt.size = .75) + 
+  ggtitle("Unsupervised clustering") +  scale_color_manual(values = group_color ) + theme ( legend.position = "right")
+
+
+```
+
+```{r}
+
+# study cell type and manually visualize 
+# in this study we are mostly concern with HSC cells 
+
+DefaultAssay(jmml_harmony) <- 'RNA'
+
+geneset = row.names(jmml_harmony@assays$RNA$data )
+
+cellmarker = list () 
+
+cellmarker [[ "cMonocyte" ]] = c ("FCGR1A", "ITGAM", "PVR", "CD14", "FCGR3A" ) # 
+cellmarker [[ "HSC" ]] = c("CD34", "CD38", "KIT", "PROM1"  )
+cellmarker [["B-cells"]] = c( "CR2", "CD72", "CD22", "IGHD", "CD19", "TNFRSF13C", "MS4A1", "NT5E", "ICOSLG",  "IGHM")
+cellmarker [["pre-B"]] = c("MME","MS4A1","IGLL1")
+cellmarker [[ "Erythroid"  ]] = c("TFRC","GYPA")
+cellmarker [[ "Neutrophil"]] = c("FCGR3B", "CEACAM8", "CSF3R", "CXCR1", "ITGAM", "CD63")
+
+setdiff ( unlist ( cellmarker), geneset )
+
+gene_query = unlist ( cellmarker)
+
+# gene alias 
+# CD90 == THY1 
+# CD45RA == PTPRC
+# CD117 = KIT
+# CD133 = PROM1 
+# CD123 = "IL3RA"
+
+ hsc_line = c(11, 10, 20 ) + 1 
+ hsc_selection = exp_cells ( gene_query = c( cellmarker [[ "HSC" ]] )   ,
+                              sob= jmml_harmony , assay_this = "RNA", 
+                              mthis="seurat_clusters", min=15, qprob=.5, avethis = "all"
+                              ,minsize= 3, maxsize=9 , scaleby = "none", xlab_size = 15, ylab_size = 15
+ )
+ 
+
+ 
+ hsc_selection$plot_0 =  hsc_selection$plot_0  +   geom_vline(aes(xintercept = 12), color = "blue", linetype = "dotted") +
+  geom_vline(aes(xintercept = hsc_line[1]), color = "blue", linetype = "dotted") +
+   geom_vline(aes(xintercept = hsc_line[2]), color = "blue", linetype = "dotted") +
+   geom_vline(aes(xintercept = hsc_line[3]), color = "blue", linetype = "dotted") +
+   scale_y_discrete(labels = rev ( c("CD34", "CD38", "CD117 (KIT)", "CD133 (PROM1)" ) ) )
+
+hsc_selection$plot_0 <-  hsc_selection$plot_0 + theme ( legend.text=element_text(size=15),
+          legend.title = element_text(size=15) , axis.text.x =  element_text(size= 15 , angle = 45, hjust = 1 )
+          )
+
+```
+
+```{r}
+# break down hsc 
+DefaultAssay(jmml_harmony)
+Idents(jmml_harmony) <- "celltype"
+harmony_hsc <- subset(jmml_harmony, idents = "HSC" )
+
+```
+
+```{r}
+
+pid_ratio <- plot_ratios(sob=jmml_harmony, cmp_this = "group" , x_this = "celltype", ccc_temp= group_color , sqrt_yes = 0  )
+
+
+```
+
+
+## Visuals {.tabset}
+
+* All samples were independently QC and normalized/scaled with the `SCTransform` function, regressing for Mitochondria content. 
+* Harmony was used for merging and batch correction. 
+
+
+### Overall After scaling and normalization 
+
+  * sample names are colored to indicate any batch effect even after corrected
+  * Ideally we want the samples to be dispersed into multiple clusters. 
+
+```{r fig=TRUE,fig.width=18, fig.height=8, echo=FALSE, include=TRUE, results='asis' }
+
+( batch_plot_pid + ggtitle ( "by sample") )+ 
+( batch_plot_group + ggtitle ( "by group"))
+
+
+```
+
+### Cluster 
+
+  * 2D UMAP  visualization of each of the clusters + cell markers for HSC 
+  * here we show empirical how HSC cells were assigned. 
+  
+
+```{r fig=TRUE,fig.width=12.5, fig.height=10, echo=FALSE, include=TRUE, results='asis' }
+
+s_plot / hsc_selection$plot_0
+
+cairo_pdf(paste0(out_figure, "cluster_plot_main.pdf"), width=8, height=7) 
+rasterize(s_plot, layers='Point', dpi=300)
+dev.off()
+
+cairo_pdf(paste0(out_figure, "hsc_cluster_visual.pdf"), width=10, height=5) 
+hsc_selection$plot_0
+dev.off()
+
+
+```
+
+### Cell Type Assignment
+
+  * we used an automated cell-type indentifier ScType to label and group each clusters. 
+  * Ianevski et al, 2022
+  * https://www.nature.com/articles/s41467-022-28803-w
+  * Immune/Blood cell type was a combination of the built in ScType in addition to CellMarker Zhang et al. 
+  * the following cell types were modified: 
+    + remove HSC/MPP cells and added:
+      - Hematopoietic stem cells (HSC)
+      - Multipotent progenitor cell (MPP)
+    + remove Progenitor cells and added the following: 
+      - Common myeloid progenitor (CMP)
+      - Granulocyte-monocyte progenitor cell(GMP) 
+      - Multilymphoid progenitor cell (MLP)
+      - Megakaryocyte erythroid cell (MEP)
+    + Add Erythroid cell
+
+```{r fig=TRUE,fig.width=8, fig.height=6, echo=FALSE, include=TRUE, results='asis' }
+cell_type_plot + ggtitle ( "cell type") 
+
+# remove UMAP labels 
+cairo_pdf(paste0(out_figure, "celltype_plot_main_noleg.pdf"), width=8, height=7) 
+rasterize(cell_type_plot + theme(legend.position = "none"), layers='Point', dpi=300)
+dev.off()
+
+
+cairo_pdf(paste0(out_figure, "celltype_plot_legend.pdf"), width=8, height=7) 
+rasterize(cell_type_plot_multi , layers='Point', dpi=300)
+dev.off()
+
+
+```
+
+
+
+
+
+### Percentage
+
+
+
+```{r fig=TRUE,fig.width=7, fig.height=10.5, echo=FALSE, include=TRUE, results='asis' }
+
+pid_ratio$bar_celltype / pid_ratio$pretty_stat
+
+```
+
+
+
+
+### cell type definition. 
+
+```{r fig=TRUE,fig.width=12, fig.height=10, echo=FALSE, include=TRUE, results='asis' }
+
+
+ctable = read.xlsx(config$celltype_marker)
+ctable = ctable [ , 3:6]
+
+
+
+colnames ( ctable)[2:3] = c("+gene", "-gene")
+#ctable$`+gene` = gsub ( ",NA", "", ctable$`+gene`)
+#ctable$`+gene` = gsub ( "NA", "", ctable$`+gene`)
+
+ctable$`+gene` = gsub ( ",", ", ", ctable$`+gene`)
+
+
+
+
+kbl( ctable[  , unique ( c("cellName", "shortName", "+gene","-gene"))] , format = "html" , row.names = F, caption = "Cell type definition",
+     ) %>% 
+  kable_paper(full_width= FALSE, position = "center")  %>%
+column_spec(3, width = "500px", background = "#fbfbfb") %>%
+  column_spec(1, bold=T  ,  border_right = T)
+
+
+```
+
+
+### Markers
+
+```{r fig=TRUE,fig.width=12, fig.height=10, echo=FALSE, include=TRUE, results='asis' }
+
+
+grade = c(
+"#fbfbfb"
+,"#f2e1df"
+,"#e8c7c3"
+,"#ddaea8"
+,"#d1958d"
+,"#c57c74"
+,"#b7635b"
+,"#a84a44"
+,"#99302d"
+,"#880a18"
+)
+
+# studying 
+# Lin−CD34+CD38−CD90+CD45RA+
+# CD90 == THY1 
+# CD45RA == PTPRC
+
+psize1 = 1.5
+
+cd34=FeaturePlot( jmml_harmony , features = "CD34", pt.size = psize1, order = F, 
+       ncol = 1, label=F , cols=grade )+  umapSimple_theme() +ggtitle ( "CD34")
+
+
+
+
+cd38 = FeaturePlot( jmml_harmony , features = "CD38", pt.size = psize1, order = F, max.cutoff = 3, 
+       ncol = 1, label=F, cols=grade ) + umapSimple_theme() +ggtitle ( "CD38")
+
+thy1 = FeaturePlot( jmml_harmony , features = "THY1", pt.size = psize1, order = F, max.cutoff = 3, 
+       ncol = 1, label=F, cols=c("#fbfbfb","#bf4824")) + umapSimple_theme() +ggtitle ( "CD90")
+
+ptprc = FeaturePlot( jmml_harmony , features = "PTPRC", pt.size = psize1, order = F, max.cutoff = 3, 
+       ncol = 1, label=F, cols=c("#fbfbfb","#bf4824")) + umapSimple_theme() +ggtitle ( "CD45RA")
+
+
+# extra 
+
+cd96 = FeaturePlot( jmml_harmony , features = "CD96", pt.size = psize1, order = F, max.cutoff = 3, 
+       ncol = 1, label=F, cols=c("#fbfbfb","#880a18")) + umapSimple_theme() +ggtitle ( "CD96")
+
+
+
+
+
+prom1 =FeaturePlot( jmml_harmony , features = "PROM1", pt.size = psize1, order = F, 
+       ncol = 1, label=F
+       , cols=grade
+                 )+ umapSimple_theme() +ggtitle ( "PROM1/CD133")
+
+kit =FeaturePlot( jmml_harmony , features = "KIT", pt.size = psize1, order = F, 
+       ncol = 1, label=F
+       , cols=grade
+                 )+ umapSimple_theme() +ggtitle ( "KIT/CD117")
+
+
+
+cell_type_plot_multi = cell_type_plot_multi + labs( x = "", y = "", title = "") + theme ( 
+  axis.text.x=element_text(angle=0, hjust=0, size=14),
+    axis.text.y=element_text(angle=0, hjust=0, size=14)
+  )
+
+
+layout <- "
+AAABBB
+CCCDDD
+EEEFFF
+"
+
+
+cd34 + cd38 + prom1 + kit + cell_type_plot_multi + guide_area()    +plot_layout(guides = 'collect', design = layout )  
+
+
+cairo_pdf(paste0(out_figure, "supp_markers.pdf"), width=9, height=8) 
+cd34 + cd38 + prom1 + kit + cell_type_plot_multi + guide_area()    +plot_layout(guides = 'collect', design = layout ) 
+ dev.off()
+
+
+
+```
+
+
+
+### CLEC12A expression
+
+```{r}
+
+
+
+# plot CLEC12A
+
+clec12a = FeaturePlot( jmml_harmony , features = "CLEC12A", pt.size = .5, order = F, 
+       ncol = 1, label=F, split.by="group"
+                 )+ theme ( legend.position = "none" ) 
+
+
+
+
+
+
+
+
+```
+
+
+
+
+```{r}
+
+
+
+
+celltype = unique ( jmml_harmony@meta.data$celltype )
+celltype = c( celltype )
+cdf = jmml_harmony@meta.data
+
+
+
+Idents(jmml_harmony) <- "celltype"
+
+
+
+if ( redo_deg == 1 ){
+  
+main_deg = list()
+for ( c in "HSC" ){
+  
+  print ( c )
+   
+   test_this <- subset(jmml_harmony, idents = c )
+   
+   # dont run DEG if there is not at least 50 cells 
+   if (  any ( table  ( test_this@meta.data$group) < 50 )  ){
+     print ( paste ( c, "not enough cells"))
+     next 
+   }
+   
+   DefaultAssay(test_this) <- "SCT"
+   Idents(test_this) <- "group"
+   deg <- FindMarkers(test_this, ident.1 = "jmml", ident.2 = "healthy_cntr", verbose = T, recorrect_umi = FALSE
+                      ,method="wilcox" # DESeq2 wilcox
+                      # , slot="data"
+                      , assay = "SCT"
+                      ,logfc.threshold = .08
+                      )
+   
+   main_deg[[c]][["deg_raw"]] = deg
+   deg <- deg[ deg$p_val_adj < .05  , ]
+   nrow ( deg )
+   
+   deg["CLEC12A", ]
+   
+   if ( nrow ( deg) < 0 ){
+     print ( paste ( c, "no DEG cells"))
+     next 
+   }
+   
+   deg$cell_surface = ifelse ( row.names(deg) %in% cell_surface, 1, 0 )
+   
+   deg$p_val = round ( deg$p_val, 5 )
+   deg$p_val_adj = round ( deg$p_val_adj, 5 )
+   
+   deg = deg[ order ( -deg$cell_surface, round ( deg$p_val_adj, 3), -deg$avg_log2FC), ]
+   
+   head(deg, n = 15)
+   deg$gene = row.names ( deg )
+ 
+  main_deg[[c]][["deg"]] = deg[ , c( "gene", "avg_log2FC", "pct.1", "pct.2" , "p_val", "p_val_adj"   , "cell_surface" )] 
+ 
+  
+  
+  ### pathway analysis using hyper and only cell surface 
+  
+  result = main_deg[[c]]$deg
+colnames ( result ) = c("gene", "logFC", "p1", "p2","P.Value", "p_val_adj" , "cell_surface" )
+
+main_deg[[c]]$hyper = get.enrich4 (
+  g =  result[ result$cell_surface == 1, ]
+  ,refdb = ens
+  ,g.name="gene"
+  , m.name="external_gene_name"
+  ,e.name="entrezgene_id"
+  , logFC= "logFC"
+  ,species="Hs"
+  ,bg = row.names ( main_deg[[c]]$deg_raw )
+  ,fdr=.05
+  ,goana_db=goanadb
+  , total_annt = 0  # how many rows to return with genes responsible for the enrichment
+  
+) 
+
+main_deg[[c]]$hyper$plots$HALLMARK$plot /
+  main_deg[[c]]$hyper$plots$BP$plot /
+  main_deg[[c]]$hyper$plots$REACT $plot 
+
+
+
+
+main_deg[[c]]$hyper$combined =  study.enrich2 ( enrich_result = main_deg[[c]]$hyper$df , limit=100, topbubble = 10  )
+
+main_deg[[c]]$hyper$combined$buildkapp.go =  
+  main_deg[[c]]$hyper$combined$buildkapp.go[ main_deg[[c]]$hyper$combined$buildkapp.go$total > 1, ]
+
+
+main_deg[[c]]$hyper$combined$top_go$group = c  
+
+  
+
+
+
+
+#genes_of_interest <- c("S100A9", "S100A6", "TYROBP", "HSP90AA1", "EMP3", "S100A4")
+
+custom_colors <- colorRampPalette(rev(brewer.pal(n = 7, name = "RdYlBu")))(100)
+    
+
+
+    # cluster jmml and healthy seperately 
+mt2 = test_this@meta.data
+jmml = mt2[mt2$group == "jmml", ]
+healthy = mt2[mt2$group == "healthy_cntr", ]
+
+
+plotthis = deg[deg$cell_surface == 1 & deg$avg_log2FC > 0 , ]
+sct_counts3 = test_this@assays$SCT$data[ row.names(test_this@assays$SCT$data ) %in% plotthis$gene,  ]
+
+
+
+# cluster and pull out order of name
+
+temp = t ( as.matrix ( sct_counts3[ , row.names ( jmml ) ] ) )
+jmml_c <- factoextra::get_dist( temp, method = "euclidean" ) # manhattan
+jmml_fit <- hclust(jmml_c, method="ward.D2") 
+dend_jmml <- as.dendrogram(jmml_fit)
+
+   
+ordered_samples <- order.dendrogram(dend_jmml)
+sample_jmml <- row.names(temp)[ordered_samples]    
+
+######### healthy 
+#temp = t ( as.matrix ( sct_counts3[ , row.names ( healthy )[1:20 ] ] ) )
+temp = t ( as.matrix ( sct_counts3[ , row.names ( healthy ) ] ) )
+healthy_c <- factoextra::get_dist( temp, method = "euclidean" ) # manhattan
+healthy_fit <- hclust(healthy_c, method="ward.D2") 
+dend_healthy <- as.dendrogram(healthy_fit)
+
+    
+ordered_samples <- order.dendrogram(dend_healthy)
+sample_healthy <- row.names(temp)[ordered_samples]    
+
+final_order = c( sample_healthy , sample_jmml )
+
+# add annotation
+final_order_df = data.frame ( group = c ( 
+                                rep ( "healthy_cntr", length (sample_healthy ) )
+                                , rep ( "jmml", length (sample_jmml ) )      
+                                ),
+                              cell =  final_order     
+                                    )
+annotation_df <- data.frame(
+  group = factor(final_order_df$group)
+)
+
+
+topannt = HeatmapAnnotation( 
+            group = annotation_df$group,
+
+            col = list ( group = group_color) # this list contains the names that matches each annotation
+              , show_legend =  T # its important to hide this because ht does not render this correctly
+      )
+
+
+sct_counts3 = as.matrix ( sct_counts3[ , final_order] )
+
+# cluster genes 
+d2 <- factoextra::get_dist( sct_counts3  , method = "euclidean" ) # manhattan
+fit2 <- hclust(d2, method="ward.D2") 
+dend_genes <- as.dendrogram(fit2)
+
+
+g10 =  gtex$range_gtex[  gtex$range_gtex$tpm5 > .75,  ]
+g10$gene = as.character(g10$gene)
+
+genes_to_show = intersect ( g10$gene, row.names( sct_counts3 ) )
+length ( genes_to_show )
+
+
+scaled_mat <- t(scale(t(sct_counts3)))
+sct_counts3.limit = scaled_mat
+sct_counts3.limit[ sct_counts3.limit> 6] = 6
+
+
+ha = rowAnnotation(foo = anno_mark(
+  at = which(rownames(sct_counts3.limit) %in% genes_to_show  ),
+ labels = rownames(sct_counts3.limit)[rownames(sct_counts3.limit) %in% genes_to_show  ])
+ ,gp = gpar(fontsize = 5)
+ 
+ )
+
+
+
+ht = Heatmap(   sct_counts3.limit
+, show_row_dend = F
+, show_column_dend = F
+, show_column_names = F
+, show_row_names = F
+, name= "Expression" # this will appear on top of legend scale
+#,top_annotation = topannt
+, col = colorRampPalette(rev(brewer.pal(n = 7, name ="RdYlBu")))(100) 
+, cluster_columns = F
+, column_order = final_order
+#, cluster_rows = dend_genes 
+#, cluster_rows =FALSE
+
+#, column_split = 2
+
+#, row_order = row.names ( sct_counts3 )
+#, row_split = rsplit
+,row_title = NULL
+# , row_names_rot = 15
+, show_heatmap_legend = T
+, row_names_side = "right",
+use_raster = TRUE, 
+ top_annotation = topannt, 
+right_annotation = ha
+#column_dend_height = unit(10, "cm")
+)
+
+
+
+main_deg[[c]][["heatmap"]] = ht 
+
+
+
+DefaultAssay(test_this) <- "SCT"
+
+ plist = list()
+ 
+ for ( g in unique ( c ("CLEC12A", "CD48", "ADGRE2"   ) )  ){
+   
+   plist [[g]] = FeaturePlot( test_this , features = c(g), pt.size = .5, order = F, 
+              ncol = 1, label=F, split.by = "group" )  
+   
+    plist [[g]]  = cleanupsplits( plist [[g]] )
+   
+   }
+
+
+ main_deg[[c]][["deg_top"]]  =  plist[[1]] / plist[[2]] / plist[[3]] 
+
+
+  
+ deg = merge ( deg, gtex$range_gtex , by="gene", all.x = T, all.y =F )
+ deg = deg[ order ( -deg$cell_surface, deg$p_val_adj, -deg$avg_log2FC), ]
+ main_deg[[c]][["deg"]] = deg 
+  
+main_deg[[c]][["sobject"]] =   test_this
+
+
+
+massspec = read.xlsx(config$massspec)
+massspec[is.na ( massspec)] <- ""
+
+overlap <- c("OGT", "ADAM17", "PREX1", "CD63", "PPP1R18", "ITGAL", "CD82", 
+             "NRAS", "ITGA5", "ADGRE5", "PLXNB2", "ADGRE2", "CD48", "IQGAP1", 
+             "S100A6", "CLEC12A", "HCK", "IFITM1", "S100A9")
+
+overlap_low =  c( "ADGRE2" , "CD48" , "CLEC12A" )
+overlap = setdiff ( overlap, overlap_low)
+massspec$Gene <- as.character(massspec$Gene)
+
+
+massspec <- massspec %>%
+  rowwise() %>%
+  mutate(
+    new_class = case_when(
+      Gene %in% overlap ~ "Dual-Positive",
+      Gene %in% overlap_low ~ "Dual-Positive+GTEx-low",
+      class == "down" ~ "down",
+      class == "no-change" ~ "no-change",
+      TRUE ~ "up"  # Default case
+    )
+  ) %>%
+  ungroup()
+
+label_this = massspec[massspec$new_class == "Dual-Positive+GTEx-low" ,  ]
+
+c2 = c 
+e = "JMML"
+c = "Control"
+# volcano plot 
+massspec$new_class = factor ( massspec$new_class, levels = c("down","up", "Dual-Positive", "Dual-Positive+GTEx-low", "no-change"))
+
+
+
+set.seed(6)
+  volcano.g <- ggplot(massspec , aes(logFC , -log10(pvalue))) +
+    #geom_point(aes(col=new_class, alpha=new_class), size=4) +
+      geom_jitter(aes(color = new_class, alpha = new_class), size = 4, width = 0.02, height = .065) +
+
+    scale_color_manual(
+      
+      values=c("down"= "#D55A3D" , "up"="#5EAE64","Dual-Positive+GTEx-low" ="orange",  "Dual-Positive" = "#6249de",  "no-change"="grey"), 
+      
+      breaks=c("down","up", "Dual-Positive", "Dual-Positive+GTEx-low", "no-change"), 
+      labels=c(
+               paste0("down ", "MS" ,"(",nrow(massspec[massspec $new_class=='down',]),")" ),
+               paste0("up ","MS","(",nrow(massspec [massspec $new_class=='up',]),")"),
+               paste0("MS+RNA","(",nrow(massspec [massspec $new_class=='Dual-Positive',]),")"),
+               paste0("MS+RNA+GTEx","(",nrow(massspec [massspec $new_class=='Dual-Positive+GTEx-low',]),")"),
+               
+               "no-change")) + 
+    scale_alpha_manual(values= c("down"=.3,"up"=.3, "Dual-Positive"=1, "Dual-Positive+GTEx-low"=1, "no-change"=.5)) +
+    ggtitle(paste0( " Mass Spec + scRNAseq ")) +
+    geom_text_repel(
+      data = label_this, 
+      aes( label = Gene), 
+      fontface=2, 
+      color="black",
+      
+      point.padding = unit(.25, "lines"),
+      box.padding = unit(.25, "lines"),
+      nudge_y = 0.21, 
+      min.segment.length = unit(0, "lines")
+    ) +theme_bw()  +  theme(legend.text=element_text(size=15), legend.position = "right") + guides(color = guide_legend(override.aes = list(size=10))) +
+     guides(alpha = FALSE
+            ,col = guide_legend( title ="Class" )
+            ) +
+    theme(legend.position="right",  legend.key = element_blank(),
+      # element_blank()
+      axis.text.y = element_text(size= 25 ),
+      axis.text.x =  element_text(size= 25 ),
+      axis.title.x = element_text(size=25),
+      axis.title.y     = element_text(size=25), 
+      legend.text      =element_text(size=25),
+      legend.title = element_text(size=25),
+      plot.title = element_text(size = 20, face = "bold", hjust = 0.5)
+
+) + theme(panel.grid.major = element_blank()
+          , panel.grid.minor = element_blank()
+          ,panel.background = element_blank()
+          , axis.line = element_line(colour = "black") # plot border
+) 
+
+  main_deg[[c2]][["volcano"]] = volcano.g 
+  
+  
+
+
+  
+}
+
+
+
+saveRDS ( main_deg, paste0( config$out_dir ,  "DEG_c7.rds" ) )
+   
+} else {
+  main_deg = readRDS ( paste0( config$out_dir ,  "DEG_c7.rds" ) )
+}
+
+
+
+```
+
+* top is a full view of CLEC12A for every cell type while bottom shows only HSC cells. 
+
+```{r fig=TRUE,fig.width=6, fig.height=10, echo=FALSE, include=TRUE, results='asis' }
+
+
+
+clec12a_hsconly = FeaturePlot( main_deg$HSC$sobject , features = "CLEC12A", pt.size = .5, order = F, 
+       ncol = 1, label=F, split.by="group"
+                 )+ theme ( legend.position = "none" ) 
+
+clec12a_hsconly[[1]] = clec12a_hsconly[[1]] + umapSimple_theme() + ggtitle ( "Healthy Controls")
+clec12a_hsconly[[2]] = clec12a_hsconly[[2]] + umapSimple_theme() + ggtitle ( "JMML")
+
+clec12a / clec12a_hsconly
+
+
+```
+
+
+
+```{r}
+
+DT::datatable(NULL)
+
+```
+
+
+## DEG {.tabset}
+
+* Identifying Genes with emphasis on cell surface markers that are differentially regulated in JMML vs healthy control 
+* Cell Surface Markers are prioritize. 
+  + Markers are based on two databases
+    - human protein atlas
+    - https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0121314
+
+
+```{r fig=TRUE,fig.width=9.5, fig.height=7.5, echo=FALSE, include=TRUE, results='asis' }
+
+
+wb <- createWorkbook()
+
+
+
+
+for ( nm in names ( main_deg ) ){
+  
+  c=nm
+  cat("### ", nm, " {.tabset}\n\n" )
+   cat('\n\n')
+   
+     cat("#### ", "distribution" , " \n\n"  )
+    cat('\n\n')
+    
+   p2 = DimPlot(main_deg[[nm]][["sobject"]], reduction = "umap", label = TRUE, repel = TRUE, group.by = 'group')    +  
+  scale_color_manual(values = group_color ) + theme( legend.position = "bottom")
+   print  ( p2 )
+   cat ( "\n\n")
+   
+   
+   cat ( "#### Table \n *DEG are ordered by cell surface marker, pvalue and logFC \n")
+   cat('\n\n')
+   cat ( '\n' )
+   
+   print(htmltools::tagList(  DT::datatable( main_deg[[nm]][["deg"]] , rownames = F, width = "950px"  
+                                , extensions = c ( 'Buttons', 'FixedColumns')
+                                      , options = list(dom = '<br Bplf <t>iprB>', buttons = c('copy', 'csv', 'excel')
+                                                 , fixedColumns = list(leftColumns = 1), pageLength =6
+                                                 , scrollX=T, className = 'dt-left') )  )  )
+
+   addWorksheet(wb, nm )
+   writeData(wb, nm , main_deg[[nm]][["deg"]]   , rowNames=F  )
+
+   cat ( "\n\n")
+   
+   
+   
+   cat("#### ", "heatmap" , " \n\n"  )
+    cat('\n\n')
+    
+   print  ( main_deg[[nm]]$heatmap  )
+   cat ( "\n\n")
+   
+   
+    cat("#### ", "Top Rep" , " \n\n"  )
+    cat('\n\n')
+    
+   print  ( main_deg[[nm]]$deg_top )
+   cat ( "\n\n")
+   
+   
+   cat("#### ", "representative" , " \n\n"  )
+   cat('\n\n')
+    
+   print  (main_deg[[nm]]$deg_top )
+   cat ( "\n\n")
+   
+   
+    
+   cat("#### ", "Pathways" , "{.tabset} \n\n"  )
+   cat('\n\n')
+   
+    cat("##### ", "Hallmark" , " \n\n"  )
+    cat('\n\n')
+    print ( main_deg[[c]]$hyper$plots$HALLMARK$plot )
+    cat('\n\n')
+    
+    cat("##### ", "BP" , " \n\n"  )
+    cat('\n\n')
+    print (  main_deg[[c]]$hyper$plots$BP$plot )
+    cat('\n\n')
+    
+     cat("##### ", "Reactome" , " \n\n"  )
+    cat('\n\n')
+    print (  main_deg[[c]]$hyper$plots$REACT$plot )
+    cat('\n\n')
+    
+    cat("##### ", "Combined" , " \n\n"  )
+    cat('\n\n')
+    print (  main_deg[[c]]$hyper$combined$plots.go)
+    cat('\n\n')
+    
+    
+    
+    
+   cat ( "\n\n")
+   
+   
+
+
+   
+   # end 
+   cat ( "\n\n")
+   
+   pathcollect = data.frame()
+   pathcollect = rbind ( main_deg[[c]]$hyper$df$KEGG ,main_deg[[c]]$hyper$df$HALLMARK   )
+   pathcollect = rbind ( pathcollect, main_deg[[c]]$hyper$df$REACT )
+   pathcollect = rbind ( pathcollect, main_deg[[c]]$hyper$df$CC )
+   pathcollect = rbind ( pathcollect, main_deg[[c]]$hyper$df$BP )
+   pathcollect = rbind ( pathcollect, main_deg[[c]]$hyper$df$MF )
+   pathfile = paste0(c,"Pathway")
+   addWorksheet(wb, pathfile )
+   writeData(wb, pathfile , pathcollect   , rowNames=F  )
+   
+}
+
+
+```
+
+```{r}
+
+cairo_pdf(paste0(out_figure, "hsc_heatmap.pdf"), width=8, height=8) 
+main_deg$HSC$heatmap
+dev.off()
+
+cairo_pdf(paste0(out_figure, "hsc_massspec_volcano.pdf"), width=9, height=5) 
+main_deg$HSC$volcano
+dev.off()
+
+
+cairo_pdf(paste0(out_figure, "hsc_clec12a.pdf"), width=5, height=2.5) 
+clec12a_hsconly
+dev.off()
+
+
+cairo_pdf(paste0(out_figure, "hsc_pathway.pdf"), width=13, height=7) 
+main_deg$HSC$hyper$combined$plots.go
+
+dev.off()
+
+
+cairo_pdf(paste0(out_figure, "hsc_top_grid.pdf"), width=6, height=6.5) 
+main_deg$HSC$deg_top
+
+dev.off()
+
+
+
+
+```
+
+
+## Session Info
+
+
+```{r fig=TRUE,fig.width=12, fig.height=7, echo=FALSE, include=TRUE } 
+
+saveWorkbook(wb, file = paste0( out_dir, "deg.xlsx"), overwrite = TRUE)
+
+sf =sessioninfo::session_info(pkgs = "attached")
+
+
+print ( sessioninfo::session_info()[1] )
+
+
+sf = data.frame(Package=sf$packages[[1]], Version=sf$packages[[2]]
+                , Source=sf$packages$source
+                ,Date=sf$packages$date, stringsAsFactors = F)
+
+kable( sf , format = "html", booktabs = T
+       , caption = "packages"
+       , row.names = F
+     ) %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F) %>%
+    column_spec(c(1), background = "#edf1f2",  border_right = F, bold=T) %>%
+    column_spec(c(2), background = "#f0f5f7",  border_right = T, italic =T)
+
+
+
+```
+

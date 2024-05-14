@@ -1,0 +1,17 @@
+type	path
+out_dir ./output_Werner/
+raw_dir /projects/lab.mis/elliot/JMML_project1/raw/scRNAseq_JMML/align7_post/
+raw_dir_trametinib /projects/lab.mis/elliot/RNAseq_trametinib/scRNAseq/post7/
+htan_raw  /projects/lab.mis/elliot/JMML_project1/raw/HTAN/post/
+massspec /projects/lab.mis/elliot/JMML_project1/scripts/scRNAseq/Mass_SpecFinal.xlsx
+accesory  /projects/lab.mis/elliot/JMML_project1/scripts/git/accessory.R
+cell_surface  /ehome/resource/markers/cell_surface/cell_surface.rds
+gopath /ehome/resource/annotation/GOpath_scRNAseq.rds
+cell_surface_hu  /ehome/resource/markers/cell_surface/cellsurface_hu_etal_2021.xlsx
+celltype_marker /ehome/resource/annotation/single_cell/ScType/JMML_blood_2.xlsx
+gtex  /ehome/resource/public/GTEX/V9/GTEX_V8_ranges_temp.rds
+sctype /projects/lab.mis/elliot/JMML_project1/scripts/ScType/sctype_score_git.R
+key1  /projects/lab.mis/elliot/JMML_project1/scripts/Huebner_key.rds
+precolor  /ehome/resource/random_tools/extra.colors.rds
+
+
