@@ -36,11 +36,6 @@ The dataset used for the Werner et al study can be accessed from the GEO SuperSe
   2. `library(BSgenome)`: Infrastructure for Bioconductor packages using large-scale genomic or other data.
   3. `library(org.Hs.eg.db)`: Mapping information for human genes.
   4. `library(GenomicFeatures)`: Tools for making and manipulating transcript centric annotations.
-  5. `library(IlluminaHumanMethylation450kanno.ilmn12.hg19)`: Annotation data for the Illumina Human Methylation 450k array.
-  6. `library(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)`: Annotation data for the Illumina Human Methylation EPIC array.
-  7. `library(IlluminaHumanMethylationEPICmanifest)`: Manifest file for Illumina's EPIC methylation arrays.
-  8. `library(Homo.sapiens)`: Annotation data for the human genome.
-  9. `library(rtracklayer)`: An interface to genome annotation files and the UCSC genome browser.
 
   ### Genomic Data Analysis (Omics):
   1. `library(DESeq2)`: Differential gene expression analysis based on the negative binomial distribution.
@@ -48,19 +43,9 @@ The dataset used for the Werner et al study can be accessed from the GEO SuperSe
   3. `library(GenomicRanges)`: Representations and manipulations of genomic intervals and variables defined along a genome.
   4. `library(GSVA)`: Gene set variation analysis for microarray and RNA-seq data.
   5. `library(Gviz)`: Plotting data and annotation information along genomic coordinates.
-  6. `library(minfi)`: Tools to analyze Illumina's methylation arrays.
-  7. `library(missMethyl)`: Analyzes differential methylation in the context of GC content.
-  8. `library(methylGSA)`: Gene set testing for Illumina's methylation arrays.
-  9. `library(pathview)`: Plots pathway maps and overlays experimental data.
-  10. `library(sva)`: Surrogate Variable Analysis: identification and adjustment for hidden confounding factors.
-  11. `library(biovizBase)`: Basic graphic utilities for visualization of genomic data.
-  12. `library(ggbio)`: Visualization tools for genomic data.
-  13. `library(limma)`: Linear models for microarray data.
-  14. `library(pathfindR)`: An R package for comprehensive identification of enriched pathways in omics data through active subnetworks
-  15. `library (DGCA)`: #Differential Gene Correlation Analysis
-
-  
-
+  6. `library(pathview)`: Plots pathway maps and overlays experimental data.
+  7. `library(ggbio)`: Visualization tools for genomic data.
+ 
   
   ### Heatmaps and Clustering:
   1. `library(clusterProfiler)`: Statistical analysis and visualization of functional profiles for genes and gene clusters.
