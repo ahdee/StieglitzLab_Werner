@@ -12,8 +12,8 @@ Future updates will include the PubMed ID (PMID) once it becomes available.
   
 # Features
 ## Bulk RNAseq and scRNAseq: 
-  + There are two R markdowns to generate all figures pertaining to the RNAseq and scRNAseq for the manuscript.
-  + There is a single auxiliary script that will provide all the custom functions to run the above markdowns. 
+  + The R markdown will generate all figures pertaining to the scRNAseq as well as the integration with Mass Spec for the manuscript.
+  + There is a single auxiliary script that will provide all the custom functions to run the above markdown. 
   + Moreover, there is a single config file that provides the paths to all the necessary input files. 
     + Please note that due to data sensitivity and licensing restrictions, we cannot provide all the files mentioned in this manuscript. Users must manually download these files using the source references provided here or in the manuscript. For example, all raw data must be downloaded as cited in the original manuscript. Preprocessed data can be requested from the Stieglitz Lab.
 # Data
