@@ -11,8 +11,8 @@ Future updates will include the PubMed ID (PMID) once it becomes available.
 * DOI:   not available
   
 # Features
-## Bulk RNAseq and scRNAseq: 
-  + The R markdown will generate all figures pertaining to the scRNAseq as well as the integration with Mass Spec for the manuscript.
+## Bulk RNA-seq and scRNA-seq: 
+  + The R markdown will generate all figures pertaining to the scRNA-seq as well as the integration with Mass Spec for the manuscript.
   + There is a single auxiliary script that will provide all the custom functions to run the above markdown. 
   + Moreover, there is a single config file that provides the paths to all the necessary input files. 
     + Please note that due to data sensitivity and licensing restrictions, we cannot provide all the files mentioned in this manuscript. Users must manually download these files using the source references provided here or in the manuscript. For example, all raw data must be downloaded as cited in the original manuscript. Preprocessed data can be requested from the Stieglitz Lab.
@@ -120,9 +120,9 @@ The dataset used for the Werner et al study can be accessed from dbGaP: phs00250
 | Description | Type     | Source | Link |
 | ---------------------------- | ------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Pathway                      | database           | MSigDB                  | [GSEA](https://www.gsea-msigdb.org/gsea/msigdb)                                                                                                                                                                                                                                                                                                                                                     |
-| Normal RNAseq             | Normal Counts  | Genotype-Tissue Expression (GTEx)              | [Portal](https://gtexportal.org/home/)             |
-| scRNAseq Normal                   | Chen et al, 2022    | PMID: 34864916                 | [PUBMED](https://pubmed.ncbi.nlm.nih.gov/34864916/)                                                                                                                                                                                     |
-| RNAseq index                 | Genomic index      | GENCODE                 | [INDEX](ftps://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_37/GRCh38.primary_assembly.genome.fa.gz)                                                                                                                                                                                                                     |
-| RNAseq GTF                   | Gene Annotation    | GENCODE                 | [GTF](ftps://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_37/gencode.v37.annotation.gtf.gz)|
+| Normal RNA-seq             | Normal Counts  | Genotype-Tissue Expression (GTEx)              | [Portal](https://gtexportal.org/home/)             |
+| scRNA-seq Normal                   | Chen et al, 2022    | PMID: 34864916                 | [PUBMED](https://pubmed.ncbi.nlm.nih.gov/34864916/)                                                                                                                                                                                     |
+| RNA-seq index                 | Genomic index      | GENCODE                 | [INDEX](ftps://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_37/GRCh38.primary_assembly.genome.fa.gz)                                                                                                                                                                                                                     |
+| RNA-seq GTF                   | Gene Annotation    | GENCODE                 | [GTF](ftps://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_37/gencode.v37.annotation.gtf.gz)|
 | Annotation of cell types     |  Ianevski et al, 2022 | ScType | [Github](https://github.com/IanevskiAleksandr/sc-type) |
 | Cell Surface Markers                | The Human Protein Atlas, Bausch-Fluck et al, 2015 and Cancer Surfaceome Atlas | Multiple |  [The Human Protein Atlas](https://www.proteinatlas.org/),<br> [PMID: 25894527](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0121314 ), <br> [Cancer Surfaceome Atlas, Hu et al, 2021](http://fcgportal.org/TCSA)
