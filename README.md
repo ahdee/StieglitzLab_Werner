@@ -1,9 +1,11 @@
 # CLL-1 as a cellular immunotherapy target in juvenile myelomonocytic leukemia
 
 # Description
-This repository contains a set of R scripts specifically designed for the data analysis performed in Werner et al. The repository provides a set of R scripts for analyzing and recreating figures pertaining to the publication. Please see the PMID below. 
+This repository contains codes specifically designed for the data analysis performed in Werner et al, 2025. The repository provides scripts for analyzing and recreating figures pertaining to the publication. Note this version cited in the paper will not have the updated PMID but later versions will be updated. 
 
-* PMID: not available PMCID: not available DOI: not available
+* PMID: not available
+* PMCID: not available
+* DOI: not available
   
 # Features
 ## Bulk RNAseq and scRNAseq: 
@@ -16,7 +18,7 @@ The dataset used for the Werner et al study can be accessed from dbGaP: phs00250
 
 # Minimum Requirements
   * Download and install R from here. R (4.1.2)
-  * Download the dataset from GEO SuperSeries xxx.
+  * Download the dataset dbGaP: phs002504.v3.p3 and all associated inputs. 
   * Main R packages
  
     + edgeR (3.28.1)
