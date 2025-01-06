@@ -1,11 +1,14 @@
-# CLL-1 as a cellular immunotherapy target in juvenile myelomonocytic leukemia
+# Discovery and development of CLL-1 as a cellular immunotherapy target in juvenile myelomonocytic leukemia
 
 # Description
-This repository contains codes specifically designed for the data analysis performed in Werner et al, 2025. The repository provides scripts for analyzing and recreating figures pertaining to the publication. Note this version cited in the paper will not have the updated PMID but later versions will be updated. 
 
-* PMID: not available
+This repository contains R scripts that reproduce the analyses and figures presented in Werner et al. (2025).
+Future updates will include the PubMed ID (PMID) once it becomes available.
+
+
+* PMID:  not available
 * PMCID: not available
-* DOI: not available
+* DOI:   not available
   
 # Features
 ## Bulk RNAseq and scRNAseq: 
