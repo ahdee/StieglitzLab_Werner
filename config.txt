@@ -1,10 +1,10 @@
 type	path
-out_dir ./output_Werner/
+out_dir /projects/lab.mis/elliot/JMML_project1/scripts/git/output_Werner/
 raw_dir /projects/lab.mis/elliot/JMML_project1/raw/scRNAseq_JMML/align7_post/
 raw_dir_trametinib /projects/lab.mis/elliot/RNAseq_trametinib/scRNAseq/post7/
 htan_raw  /projects/lab.mis/elliot/JMML_project1/raw/HTAN/post/
 massspec /projects/lab.mis/elliot/JMML_project1/scripts/scRNAseq/Mass_SpecFinal.xlsx
-accesory  /projects/lab.mis/elliot/JMML_project1/scripts/git/accessory.R
+accesory  /projects/lab.mis/elliot/JMML_project1/scripts/accessory.R
 cell_surface  /ehome/resource/markers/cell_surface/cell_surface.rds
 gopath /ehome/resource/annotation/GOpath_scRNAseq.rds
 cell_surface_hu  /ehome/resource/markers/cell_surface/cellsurface_hu_etal_2021.xlsx

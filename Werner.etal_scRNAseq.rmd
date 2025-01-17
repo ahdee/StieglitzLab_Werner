@@ -62,13 +62,12 @@ library ( stringr )
 library ( dplyr)
 library ( tidyr)
 library ( purrr )
-
+library ( limma )
 library ( factoextra)
-
+library ( data.table)
 # statistical modeling 
 library ( Seurat)
 library ( harmony)
-library ( limma )
 
 
 # plot & ascethetic  
@@ -95,10 +94,7 @@ colnames ( config ) = config[1:1, ]
 config = config [-1,]
 
 
-source ( config$accesory)
-# for SC-type please download from source
-# GNU General Public License v3.0 (https://github.com/IanevskiAleksandr/sc-type/
-source ( config$sctype)
+
 
 # loading necessary annotations and data 
 
@@ -127,7 +123,7 @@ umi_min = 1000
 
 # some preprocessing and merge files will be stored as cache 
 redo = 0 # set to one to redo all 
-redo_deg = 0 # for DEG 
+redo_deg = 1 # for DEG 
 # for DEG if redo is 1 
 if ( redo == 1){
   redo_deg = 1
@@ -141,7 +137,7 @@ dir.create ( preprocessed_dir )
 filename_raw = paste0(preprocessed_dir, "RAW_JMML_HTANcontrols_7.rds" )
 filename_norm = paste0(preprocessed_dir, "Normalize_JMML_HTANcontrols_7.rds" )
 
-out_dir = config$out_dir
+out_dir = config$out_dir 
 out_figure = paste0(out_dir, "figures/")
 dir.create(out_dir)
 dir.create ( out_figure )
@@ -157,8 +153,18 @@ raw_dirs = raw_dirs[ grepl ( "L.*outs$", raw_dirs, ignore.case = TRUE)]
 # again please contact GEO set 
 htan_raw = config$htan_raw
 
+# generate colors 
+getPalette = colorRampPalette(brewer.pal(9, "Set1")) # expand color pallete
+main_clrs = readRDS( config$precolor )
+
+rcolor = main_clrs$rcolor
+main_clrs = main_clrs$main_clrs
 
 
+source ( config$accesory)
+# for SC-type please download from source
+# GNU General Public License v3.0 (https://github.com/IanevskiAleksandr/sc-type/
+source ( config$sctype)
 
 
 ```
@@ -639,8 +645,8 @@ saveRDS(list ( final = jmml_harmony, preplots = preplots, raw = slist ), filenam
 }else {
   jmml_harmony = readRDS (filename_norm) 
   preplots = jmml_harmony$preplots
+  raw = jmml_harmony$raw
   jmml_harmony = jmml_harmony$final
-
 }
 
 #unique ( jmml_harmony$orig.ident)
@@ -797,16 +803,13 @@ qc_mito / qc_nfeature
 
 dev.off()
 
-
-
-
 ```
 
 ```{r fig=TRUE,fig.width=17, fig.height=10, echo=FALSE, include=TRUE, results='asis' }
-
-for ( n in names (preplots )){
+pre = preplots
+for ( n in names (pre )){
   cat ( "### ", n, "\n\n"  )
-  print ( ( preplots[[n]]$hist)  |  ( preplots[[n]]$befor_after ))
+  print ( ( pre[[n]]$hist)  |  (pre[[n]]$befor_after ))
   cat ( '\n\n')
 }
 
@@ -956,11 +959,13 @@ geneset = row.names(jmml_harmony@assays$RNA$data )
 cellmarker = list () 
 
 cellmarker [[ "cMonocyte" ]] = c ("FCGR1A", "ITGAM", "PVR", "CD14", "FCGR3A" ) # 
-cellmarker [[ "HSC" ]] = c("CD34", "CD38", "KIT", "PROM1"  )
+cellmarker [[ "HSC" ]] = c("CD34", "CD38", "KIT", "PROM1", "GATA2"   )
 cellmarker [["B-cells"]] = c( "CR2", "CD72", "CD22", "IGHD", "CD19", "TNFRSF13C", "MS4A1", "NT5E", "ICOSLG",  "IGHM")
 cellmarker [["pre-B"]] = c("MME","MS4A1","IGLL1")
 cellmarker [[ "Erythroid"  ]] = c("TFRC","GYPA")
 cellmarker [[ "Neutrophil"]] = c("FCGR3B", "CEACAM8", "CSF3R", "CXCR1", "ITGAM", "CD63")
+
+cellmarker [[ "HSC_HSPC"]] = c("CD34", "CD38", "PTPRC", "IL3RA" ,"THY1"  )
 
 setdiff ( unlist ( cellmarker), geneset )
 
@@ -986,11 +991,69 @@ gene_query = unlist ( cellmarker)
   geom_vline(aes(xintercept = hsc_line[1]), color = "blue", linetype = "dotted") +
    geom_vline(aes(xintercept = hsc_line[2]), color = "blue", linetype = "dotted") +
    geom_vline(aes(xintercept = hsc_line[3]), color = "blue", linetype = "dotted") +
-   scale_y_discrete(labels = rev ( c("CD34", "CD38", "CD117 (KIT)", "CD133 (PROM1)" ) ) )
+   scale_y_discrete(labels = rev ( c("CD34", "CD38", "CD117 (KIT)", "CD133 (PROM1)", "GATA2" ) ) )
 
 hsc_selection$plot_0 <-  hsc_selection$plot_0 + theme ( legend.text=element_text(size=15),
           legend.title = element_text(size=15) , axis.text.x =  element_text(size= 15 , angle = 45, hjust = 1 )
           )
+
+#####################
+
+
+
+
+#############
+
+
+
+if ( 1 > 2 ){
+library ( scGate )
+db_ = config$celltype_marker;
+tissue = "blood_fix" # 
+
+
+# extract shorter name 
+shortname = read.xlsx( db_)
+shortname = shortname[!duplicated ( shortname$cellName), ]
+shortname = setNames( shortname$shortName, shortname$cellName )
+# prepare gene sets
+gs_list = gene_sets_prepare(db_, tissue)
+
+
+
+sob_test = jmml_harmony
+selthis = row.names(sob_test@assays$RNA$data)
+rmv = names ( sob_test@meta.data)
+keepthis = which ( !grepl ( "_UCell|_CLass", rmv ))
+rmv = rmv[keepthis]
+sob_test@meta.data = sob_test@meta.data[ , rmv ]
+
+ 
+   DefaultAssay(sob_test) = "RNA" 
+    
+    for ( n in names ( gs_list$gs_positive )){
+      gthis = intersect ( gs_list$gs_positive[[n]], c ( selthis))
+      findcell ( gthis, n )
+      print ( n )
+    }
+ 
+
+sob_test@meta.data$cluster <- apply(sob_test@meta.data, 1, find_highestUcell)
+    sob_test@meta.data$cluster <- ifelse ( is.na( sob_test@meta.data$cluster), "Undetermined", sob_test@meta.data$cluster )
+    
+
+  # associate with clusters
+cluster_assign = 1
+if( cluster_assign == 1){
+   tab = data.frame ( table ( sob_test@meta.data[ ,c("seurat_clusters","cluster"  ) ] ) )
+  tab = tab[ order( tab$seurat_clusters, -tab$Freq ), ]
+  tab = tab[!duplicated ( tab$seurat_clusters), ]
+  tab= setNames(as.character ( tab$celltype), as.character ( tab$seurat_clusters))
+}
+
+
+}
+
 
 ```
 
@@ -1071,13 +1134,8 @@ dev.off()
 cell_type_plot + ggtitle ( "cell type") 
 
 # remove UMAP labels 
-cairo_pdf(paste0(out_figure, "celltype_plot_main_noleg.pdf"), width=8, height=7) 
-rasterize(cell_type_plot + theme(legend.position = "none"), layers='Point', dpi=300)
-dev.off()
-
-
-cairo_pdf(paste0(out_figure, "celltype_plot_legend.pdf"), width=8, height=7) 
-rasterize(cell_type_plot_multi , layers='Point', dpi=300)
+cairo_pdf(paste0(out_figure, "celltype_plot_main.pdf"), width=8, height=7) 
+rasterize(cell_type_plot, layers='Point', dpi=300)
 dev.off()
 
 
@@ -1176,7 +1234,7 @@ cd96 = FeaturePlot( jmml_harmony , features = "CD96", pt.size = psize1, order = 
        ncol = 1, label=F, cols=c("#fbfbfb","#880a18")) + umapSimple_theme() +ggtitle ( "CD96")
 
 
-
+psize1 = 3
 
 
 prom1 =FeaturePlot( jmml_harmony , features = "PROM1", pt.size = psize1, order = F, 
@@ -1189,6 +1247,11 @@ kit =FeaturePlot( jmml_harmony , features = "KIT", pt.size = psize1, order = F,
        , cols=grade
                  )+ umapSimple_theme() +ggtitle ( "KIT/CD117")
 
+gata2 =FeaturePlot( jmml_harmony , features = "GATA2", pt.size = psize1, order = F, 
+       ncol = 1, label=F
+       , cols=grade
+                 )+ umapSimple_theme() +ggtitle ( "GATA2")
+
 
 
 cell_type_plot_multi = cell_type_plot_multi + labs( x = "", y = "", title = "") + theme ( 
@@ -1197,6 +1260,8 @@ cell_type_plot_multi = cell_type_plot_multi + labs( x = "", y = "", title = "") 
   )
 
 
+celltype_ajd = cell_type_plot_multi + theme ( legend.position = "bottom") + guides(color = guide_legend(ncol  = 5))
+
 layout <- "
 AAABBB
 CCCDDD
@@ -1204,12 +1269,21 @@ EEEFFF
 "
 
 
-cd34 + cd38 + prom1 + kit + cell_type_plot_multi + guide_area()    +plot_layout(guides = 'collect', design = layout )  
+cd34 + cd38 + prom1 + kit + celltype_ajd + gata2    +plot_layout(design = layout )  
 
 
 cairo_pdf(paste0(out_figure, "supp_markers.pdf"), width=9, height=8) 
-cd34 + cd38 + prom1 + kit + cell_type_plot_multi + guide_area()    +plot_layout(guides = 'collect', design = layout ) 
- dev.off()
+#cd34 + cd38 + prom1 + kit + cell_type_plot_multi + guide_area()    +plot_layout(guides = 'collect', design = layout ) 
+#cairo_pdf(paste0(out_figure, "supp_markers.pdf"), width=7, height=6) 
+rasterize(cd34, layers='Point', dpi=300) + 
+rasterize(cd38, layers='Point', dpi=300) + 
+rasterize(prom1, layers='Point', dpi=300) + 
+rasterize(kit, layers='Point', dpi=300) + 
+rasterize(celltype_ajd, layers='Point', dpi=300) + 
+rasterize(gata2, layers='Point', dpi=300)    +
+plot_layout(design = layout )  
+
+dev.off()
 
 
 
@@ -1219,7 +1293,7 @@ cd34 + cd38 + prom1 + kit + cell_type_plot_multi + guide_area()    +plot_layout(
 
 ### CLEC12A expression
 
-```{r}
+```{r fig=TRUE,fig.width=12, fig.height=10, echo=FALSE, include=TRUE, results='asis' }
 
 
 
@@ -1230,8 +1304,7 @@ clec12a = FeaturePlot( jmml_harmony , features = "CLEC12A", pt.size = .5, order 
                  )+ theme ( legend.position = "none" ) 
 
 
-
-
+clec12a
 
 
 
@@ -1521,7 +1594,6 @@ massspec <- massspec %>%
 
 label_this = massspec[massspec$new_class == "Dual-Positive+GTEx-low" ,  ]
 
-c2 = c 
 e = "JMML"
 c = "Control"
 # volcano plot 
@@ -1578,7 +1650,7 @@ set.seed(6)
           , axis.line = element_line(colour = "black") # plot border
 ) 
 
-  main_deg[[c2]][["volcano"]] = volcano.g 
+  main_deg[[c]][["volcano"]] = volcano.g 
   
   
 
@@ -1588,7 +1660,7 @@ set.seed(6)
 
 
 
-saveRDS ( main_deg, paste0( config$out_dir ,  "DEG_c7.rds" ) )
+#saveRDS ( main_deg, paste0( config$out_dir ,  "DEG_c7.rds" ) )
    
 } else {
   main_deg = readRDS ( paste0( config$out_dir ,  "DEG_c7.rds" ) )
@@ -1598,9 +1670,7 @@ saveRDS ( main_deg, paste0( config$out_dir ,  "DEG_c7.rds" ) )
 
 ```
 
-* top is a full view of CLEC12A for every cell type while bottom shows only HSC cells. 
-
-```{r fig=TRUE,fig.width=6, fig.height=10, echo=FALSE, include=TRUE, results='asis' }
+```{r}
 
 
 
@@ -1611,7 +1681,6 @@ clec12a_hsconly = FeaturePlot( main_deg$HSC$sobject , features = "CLEC12A", pt.s
 clec12a_hsconly[[1]] = clec12a_hsconly[[1]] + umapSimple_theme() + ggtitle ( "Healthy Controls")
 clec12a_hsconly[[2]] = clec12a_hsconly[[2]] + umapSimple_theme() + ggtitle ( "JMML")
 
-clec12a / clec12a_hsconly
 
 
 ```
@@ -1642,8 +1711,7 @@ wb <- createWorkbook()
 
 
 
-for ( nm in names ( main_deg ) ){
-  
+for ( nm in "HSC" ){
   c=nm
   cat("### ", nm, " {.tabset}\n\n" )
    cat('\n\n')
@@ -1662,7 +1730,7 @@ for ( nm in names ( main_deg ) ){
    cat ( '\n' )
    
    print(htmltools::tagList(  DT::datatable( main_deg[[nm]][["deg"]] , rownames = F, width = "950px"  
-                                , extensions = c ( 'Buttons', 'FixedColumns')
+                                , extensions = c ( 'Buttons')
                                       , options = list(dom = '<br Bplf <t>iprB>', buttons = c('copy', 'csv', 'excel')
                                                  , fixedColumns = list(leftColumns = 1), pageLength =6
                                                  , scrollX=T, className = 'dt-left') )  )  )
@@ -1681,11 +1749,12 @@ for ( nm in names ( main_deg ) ){
    cat ( "\n\n")
    
    
-    cat("#### ", "Top Rep" , " \n\n"  )
+    cat("#### ", "Mass Spec" , " \n\n"  )
     cat('\n\n')
     
-   print  ( main_deg[[nm]]$deg_top )
+   print ( main_deg$Control$volcano )
    cat ( "\n\n")
+   
    
    
    cat("#### ", "representative" , " \n\n"  )
@@ -1730,17 +1799,6 @@ for ( nm in names ( main_deg ) ){
    
    # end 
    cat ( "\n\n")
-   
-   pathcollect = data.frame()
-   pathcollect = rbind ( main_deg[[c]]$hyper$df$KEGG ,main_deg[[c]]$hyper$df$HALLMARK   )
-   pathcollect = rbind ( pathcollect, main_deg[[c]]$hyper$df$REACT )
-   pathcollect = rbind ( pathcollect, main_deg[[c]]$hyper$df$CC )
-   pathcollect = rbind ( pathcollect, main_deg[[c]]$hyper$df$BP )
-   pathcollect = rbind ( pathcollect, main_deg[[c]]$hyper$df$MF )
-   pathfile = paste0(c,"Pathway")
-   addWorksheet(wb, pathfile )
-   writeData(wb, pathfile , pathcollect   , rowNames=F  )
-   
 }
 
 
@@ -1753,7 +1811,7 @@ main_deg$HSC$heatmap
 dev.off()
 
 cairo_pdf(paste0(out_figure, "hsc_massspec_volcano.pdf"), width=9, height=5) 
-main_deg$HSC$volcano
+main_deg$Control$volcano
 dev.off()
 
 
@@ -1778,6 +1836,12 @@ dev.off()
 
 ```
 
+```{r}
+# for reviewers 
+# reviews1.R 
+# source or run this. 
+
+```
 
 ## Session Info
 
@@ -1786,7 +1850,7 @@ dev.off()
 
 saveWorkbook(wb, file = paste0( out_dir, "deg.xlsx"), overwrite = TRUE)
 
-sf =sessioninfo::session_info(pkgs = "attached")
+sf =sessioninfo::session_info()
 
 
 print ( sessioninfo::session_info()[1] )
@@ -1807,4 +1871,3 @@ kable( sf , format = "html", booktabs = T
 
 
 ```
-
