@@ -1,26 +1,28 @@
-# CLL-1 as a cellular immunotherapy target in juvenile myelomonocytic leukemia
+# Discovery and development of CLL-1 as a cellular immunotherapy target in juvenile myelomonocytic leukemia
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14606595.svg)](https://doi.org/10.5281/zenodo.14606594)
 
 # Description
-This repository contains a set of R scripts specifically designed for the data analysis performed in Werner et al. The repository provides a set of R scripts for analyzing and recreating all the figures pertaining to the publication. Please see the PMID below. 
 
-* PMID: not available PMCID: not available DOI: not available
+This repository contains R scripts that reproduce the analyses and figures presented in Werner et al. (2025).
+Future updates will include the PubMed ID (PMID) once it becomes available.
+
+
+* PMID:  not available
+* PMCID: not available
+* DOI:   not available
   
 # Features
-## Bulk RNAseq and scRNAseq: 
-  + There are two R markdowns to generate all figures pertaining to the RNAseq and scRNAseq for the manuscript.
-  + There is a single auxiliary script that will provide all the custom functions to run the above markdowns. 
+## Bulk RNA-seq and scRNA-seq: 
+  + The R markdown will generate all figures pertaining to the scRNA-seq as well as the integration with Mass Spec for the manuscript.
+  + There is a single auxiliary script that will provide all the custom functions to run the above markdown. 
   + Moreover, there is a single config file that provides the paths to all the necessary input files. 
     + Please note that due to data sensitivity and licensing restrictions, we cannot provide all the files mentioned in this manuscript. Users must manually download these files using the source references provided here or in the manuscript. For example, all raw data must be downloaded as cited in the original manuscript. Preprocessed data can be requested from the Stieglitz Lab.
 # Data
-The dataset used for the Werner et al study can be accessed from the GEO SuperSeries under the accession number XXX.
-### This SuperSeries is composed of the following SubSeries:
-  + GSExxx [RNA-seq]
-  + GSExxx [scRNA-seq]
-  + GSExxx [Mass-Spec]
+The dataset used for the Werner et al study can be accessed from dbGaP: phs002504.v3.p3.
 
 # Minimum Requirements
   * Download and install R from here. R (4.1.2)
-  * Download the dataset from GEO SuperSeries xxx.
+  * Download the dataset dbGaP: phs002504.v3.p3 and all associated inputs. 
   * Main R packages
  
     + edgeR (3.28.1)
@@ -36,11 +38,6 @@ The dataset used for the Werner et al study can be accessed from the GEO SuperSe
   2. `library(BSgenome)`: Infrastructure for Bioconductor packages using large-scale genomic or other data.
   3. `library(org.Hs.eg.db)`: Mapping information for human genes.
   4. `library(GenomicFeatures)`: Tools for making and manipulating transcript centric annotations.
-  5. `library(IlluminaHumanMethylation450kanno.ilmn12.hg19)`: Annotation data for the Illumina Human Methylation 450k array.
-  6. `library(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)`: Annotation data for the Illumina Human Methylation EPIC array.
-  7. `library(IlluminaHumanMethylationEPICmanifest)`: Manifest file for Illumina's EPIC methylation arrays.
-  8. `library(Homo.sapiens)`: Annotation data for the human genome.
-  9. `library(rtracklayer)`: An interface to genome annotation files and the UCSC genome browser.
 
   ### Genomic Data Analysis (Omics):
   1. `library(DESeq2)`: Differential gene expression analysis based on the negative binomial distribution.
@@ -48,19 +45,9 @@ The dataset used for the Werner et al study can be accessed from the GEO SuperSe
   3. `library(GenomicRanges)`: Representations and manipulations of genomic intervals and variables defined along a genome.
   4. `library(GSVA)`: Gene set variation analysis for microarray and RNA-seq data.
   5. `library(Gviz)`: Plotting data and annotation information along genomic coordinates.
-  6. `library(minfi)`: Tools to analyze Illumina's methylation arrays.
-  7. `library(missMethyl)`: Analyzes differential methylation in the context of GC content.
-  8. `library(methylGSA)`: Gene set testing for Illumina's methylation arrays.
-  9. `library(pathview)`: Plots pathway maps and overlays experimental data.
-  10. `library(sva)`: Surrogate Variable Analysis: identification and adjustment for hidden confounding factors.
-  11. `library(biovizBase)`: Basic graphic utilities for visualization of genomic data.
-  12. `library(ggbio)`: Visualization tools for genomic data.
-  13. `library(limma)`: Linear models for microarray data.
-  14. `library(pathfindR)`: An R package for comprehensive identification of enriched pathways in omics data through active subnetworks
-  15. `library (DGCA)`: #Differential Gene Correlation Analysis
-
-  
-
+  6. `library(pathview)`: Plots pathway maps and overlays experimental data.
+  7. `library(ggbio)`: Visualization tools for genomic data.
+ 
   
   ### Heatmaps and Clustering:
   1. `library(clusterProfiler)`: Statistical analysis and visualization of functional profiles for genes and gene clusters.
@@ -134,9 +121,9 @@ The dataset used for the Werner et al study can be accessed from the GEO SuperSe
 | Description | Type     | Source | Link |
 | ---------------------------- | ------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Pathway                      | database           | MSigDB                  | [GSEA](https://www.gsea-msigdb.org/gsea/msigdb)                                                                                                                                                                                                                                                                                                                                                     |
-| Normal RNAseq             | Normal Counts  | Genotype-Tissue Expression (GTEx)              | [Portal](https://gtexportal.org/home/)             |
-| scRNAseq Normal                   | Chen et al, 2022    | PMID: 34864916                 | [PUBMED](https://pubmed.ncbi.nlm.nih.gov/34864916/)                                                                                                                                                                                     |
-| RNAseq index                 | Genomic index      | GENCODE                 | [INDEX](ftps://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_37/GRCh38.primary_assembly.genome.fa.gz)                                                                                                                                                                                                                     |
-| RNAseq GTF                   | Gene Annotation    | GENCODE                 | [GTF](ftps://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_37/gencode.v37.annotation.gtf.gz)|
+| Normal RNA-seq             | Normal Counts  | Genotype-Tissue Expression (GTEx)              | [Portal](https://gtexportal.org/home/)             |
+| scRNA-seq Normal                   | Chen et al, 2022    | PMID: 34864916                 | [PUBMED](https://pubmed.ncbi.nlm.nih.gov/34864916/)                                                                                                                                                                                     |
+| RNA-seq index                 | Genomic index      | GENCODE                 | [INDEX](ftps://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_37/GRCh38.primary_assembly.genome.fa.gz)                                                                                                                                                                                                                     |
+| RNA-seq GTF                   | Gene Annotation    | GENCODE                 | [GTF](ftps://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_37/gencode.v37.annotation.gtf.gz)|
 | Annotation of cell types     |  Ianevski et al, 2022 | ScType | [Github](https://github.com/IanevskiAleksandr/sc-type) |
 | Cell Surface Markers                | The Human Protein Atlas, Bausch-Fluck et al, 2015 and Cancer Surfaceome Atlas | Multiple |  [The Human Protein Atlas](https://www.proteinatlas.org/),<br> [PMID: 25894527](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0121314 ), <br> [Cancer Surfaceome Atlas, Hu et al, 2021](http://fcgportal.org/TCSA)
