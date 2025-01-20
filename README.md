@@ -1,5 +1,5 @@
 # Discovery and development of CLL-1 as a cellular immunotherapy target in juvenile myelomonocytic leukemia
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14606595.svg)](https://doi.org/10.5281/zenodo.14606594)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14606594.svg)](https://doi.org/10.5281/zenodo.14606594)
 
 # Description
 
